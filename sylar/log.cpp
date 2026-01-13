@@ -16,7 +16,7 @@ namespace sylar{
  */
 
 LogEvent::LogEvent(std::string loggerName, LogLevel::Level level, const char* file, int32_t line, uint32_t elapse,
-            uint32_t threadId, uint32_t fiberId, uint32_t time            )
+            uint32_t threadId, uint32_t fiberId, uint32_t time)
             :m_loggerName(loggerName)
             ,m_level(level)
             ,m_file(file)
@@ -330,8 +330,9 @@ void LogFormatter::init() {
     // 这里由于format是virtual虚函数，因此即使是FormatItem::ptr仍可识别出相应的重载函数
     static std::map<std::string, std::function<FormatItem::ptr(const std::string& fmt)> > s_format_items = {
 #define XX(str, C) \
-        {#str, [](const std::string& fmt) { return FormatItem::ptr(new C(fmt)); } }
-
+        {#str, [](const std::string& fmt) { return std::make_shared<C>(fmt); }}
+        // {#str, [](const std::string& fmt) { return FormatItem::ptr(new C(fmt)); } }
+        
         // 这里为了符合时间Item需要传入一个字符串初始化
         // 其余item必须也实现一个 “含一个字符串参数的构造函数”
         XX(m, MessageFormatItem),           //m:消息
@@ -352,14 +353,16 @@ void LogFormatter::init() {
     for(auto& i : vec) {
         if(std::get<2>(i) == 0) {
             // 0 代表普通字符串
-            m_items.push_back(FormatItem::ptr(new StringFormatItem(std::get<0>(i))));
+            // m_items.push_back(FormatItem::ptr(new StringFormatItem(std::get<0>(i))));
+            m_items.push_back(std::make_shared<StringFormatItem>(std::get<0>(i)));
         } else {
             // 1 是转义字符
             // 通过占位符找到对应的处理函数
             auto it = s_format_items.find(std::get<0>(i));
             if(it == s_format_items.end()) {
                 // 格式错误
-                m_items.push_back(FormatItem::ptr(new StringFormatItem("<<error_format %" + std::get<0>(i) + ">>")));
+                // m_items.push_back(FormatItem::ptr(new StringFormatItem("<<error_format %" + std::get<0>(i) + ">>")));
+                m_items.push_back(std::make_shared<StringFormatItem>(("<<error_format %" + std::get<0>(i) + ">>")));
                 m_error = true;
             } else {
                 // 将对应item压入，并传入构造字符串
@@ -450,10 +453,20 @@ LogEventWrap::LogEventWrap(Logger::ptr logger, LogEvent::ptr event)
     ,m_event(event) {
 
 }
+
+/**
+ * @brief 析构时调用日志器进行日志输出
+ * 
+ */
 LogEventWrap::~LogEventWrap() {
     m_logger->log(m_event);
 }
 
+/**
+ * @brief 返回日志事件中的字符流，方便进行流式写入
+ * 
+ * @return std::stringstream& 
+ */
 std::stringstream& LogEventWrap::getSS() {
     return m_event->getSS();
 }
@@ -468,7 +481,8 @@ LogAppender::LogAppender(LogFormatter::ptr formatter)
 }
 
 StdoutLogAppender::StdoutLogAppender()
-    :LogAppender(LogFormatter::ptr(new LogFormatter)) {
+    // :LogAppender(LogFormatter::ptr(new LogFormatter)) {
+    :LogAppender(std::make_shared<LogFormatter>()) {
 
 }
 
@@ -480,9 +494,9 @@ void StdoutLogAppender::log(LogEvent::ptr event) {
 }
 
 FileLogAppender::FileLogAppender(const std::string& filename) 
-    :LogAppender(LogFormatter::ptr(new LogFormatter)) {
-    m_filename = filename;
-
+    // :LogAppender(LogFormatter::ptr(new LogFormatter))
+    :LogAppender(std::make_shared<LogFormatter>())
+    ,m_filename(filename) {
     reopen();
 }
 
@@ -508,8 +522,10 @@ void FileLogAppender::log(LogEvent::ptr event) {
 LoggerManager::LoggerManager() {
     // 初始化默认logger
     // logger构造函数有默认参数name和level
-    m_root.reset(new Logger);
-    m_root->addAppender(LogAppender::ptr(new StdoutLogAppender));
+    // m_root.reset(new Logger);
+    m_root = std::make_shared<Logger>();
+    // m_root->addAppender(LogAppender::ptr(new StdoutLogAppender));
+    m_root->addAppender(std::make_shared<StdoutLogAppender>());
 }
 
 Logger::ptr LoggerManager::getLogger(const std::string& loggerName) {

@@ -54,6 +54,9 @@
 #define SYLAR_LOG_FMT_ERROR(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::ERROR, fmt, __VA_ARGS__)
 #define SYLAR_LOG_FMT_FATAL(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::FATAL, fmt, __VA_ARGS__)
 
+// 宏定义简化获取LoggerManager中默认日志器的接口
+#define SYLAR_LOG_ROOT() sylar::LoggerMgr::GetInstance()->getRoot()
+
 namespace sylar {
 
 // 日志级别
@@ -254,8 +257,9 @@ public:
 
     // 方便直接根据配置文件进行初始化
     void init();
+    Logger::ptr getRoot() const { return m_root;}
 private:
-    // logger集合 
+    // logger集合，每个string对应一个logger 
     std::map<std::string, Logger::ptr> m_loggers;
     // 默认logger
     Logger::ptr m_root;
