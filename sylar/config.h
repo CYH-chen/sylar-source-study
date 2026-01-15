@@ -11,6 +11,7 @@
 #include <string>
 #include <sstream>
 #include <boost/lexical_cast.hpp>
+#include <yaml-cpp/yaml.h>
 #include "log.h"
 
 namespace sylar {
@@ -21,6 +22,9 @@ public:
     ConfigVarBase(const std::string& name, const std::string& description = "") 
         :m_name(name) 
         ,m_description(description){
+        // 转小写
+        // ::代表全局命名空间，std::为标准命名空间，tolower在c++中有两个实现分别位于cctype和locale头文件中
+        std::transform(m_name.begin(), m_name.end(), m_name.begin(), ::tolower);
     }
     virtual ~ConfigVarBase() {}
 
@@ -92,13 +96,14 @@ public:
             const T& default_val, const std::string& description) {
         // 调用时必须显式指定模板参数T，才能识别对应函数
         auto temp = Lookup<T>(name);
-        // 如果是nullptr代表没有，或者类型错误
+        // 如果是nullptr代表没有，或者类型错误；反之则找到
         if(temp) {
             SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name:" << name << " exists";
             return temp;
         }
 
         // find_first_not_of()若找到，则返回位置索引；若找不到，即全部字符都合法，则返回std::string::npos
+        // 构造时已强制转小写
         if(name.find_first_not_of("abcdefghikjlmnopqrstuvwxyz._0123456789")
                 != std::string::npos) {
             SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "Lookup name invalid " << name;
@@ -124,6 +129,21 @@ public:
         // 类型错误不会被“偷偷转换”，会返回nullptr
         return std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
     }
+
+    /**
+     * @brief 从YAML的Node节点中读取所有配置项
+     * 
+     * @param node YAML的Node节点
+     */
+    static void LoadFromFile(const YAML::Node& node);
+    /**
+     * @brief 查找配置参数
+     * 
+     * @param name 配置项名
+     * @return ConfigVarBase::ptr 配置基类
+     */
+    static ConfigVarBase::ptr LookupBase(const std::string& name);
+
 private:
     /**
      * @brief 统一存储所有配置项的容器（这里使用inline，不需要在.cpp中再定义）

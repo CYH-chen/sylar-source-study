@@ -24,6 +24,12 @@ public:
         static T v;
         return &v;
     }
+    // 禁用拷贝构造和赋值
+    Singleton(const Singleton&) = delete;
+    Singleton& operator=(const Singleton&) = delete;
+// 构造函数非公有
+protected:
+    Singleton() = default;
 };
 
 template<class T, class X = void, int N = 0>
@@ -33,6 +39,9 @@ public:
         static std::shared_ptr<T> v(new T);
         return v;
     }
+// 构造函数非公有
+protected:
+    SingletonPtr() = default;
 };
 
 }
