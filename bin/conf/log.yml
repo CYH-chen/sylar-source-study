@@ -14,5 +14,17 @@ logs:
             filename: log.txt
           - type: StdoutLogAppender
 system:
-    port: 9999
-    value: 99.9
+    port: 1010
+    value: 80
+    int_vec:
+      - 6
+      - 7
+    int_list: [101]
+    int_set: [1,1]
+    int_unordered_set: [99, 99]
+    str_int_map:
+      map: 1
+      map2: 2
+    str_int_unordered_map:
+      unmap: 5
+      unmap2: 6

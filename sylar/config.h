@@ -12,6 +12,13 @@
 #include <sstream>
 #include <boost/lexical_cast.hpp>
 #include <yaml-cpp/yaml.h>
+#include <vector>
+#include <list>
+#include <set>
+#include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <concepts>
 #include "log.h"
 
 namespace sylar {
@@ -38,7 +45,239 @@ protected:
     std::string m_description;
 };
 
+// F from_type; T to_type
+template<class F, class T, class Enable = void>
+class Lexical_cast {
+public:
+    // 从 F -> T 重载()运算符
+    T operator()(const F& val) {
+        return boost::lexical_cast<T>(val);
+    }
+};
+
+// // 容器判定 C++ 20之前
+// // vector / list 的判定
+// template<class T>
+// struct is_sequence_container : std::false_type {};
+// template<class T, class Alloc>
+// struct is_sequence_container<std::vector<T, Alloc>> : std::true_type {};
+// template<class T, class Alloc>
+// struct is_sequence_container<std::list<T, Alloc>> : std::true_type {};
+// // set / unordered_set 的判定
+// template<class T>
+// struct is_set_container : std::false_type {};
+// template<class Key, class Compare, class Alloc>
+// struct is_set_container<std::set<Key, Compare, Alloc>> : std::true_type {};
+// template<class Key, class Hash, class Eq, class Alloc>
+// struct is_set_container<std::unordered_set<Key, Hash, Eq, Alloc>> : std::true_type {};
+// // map / unordered_map 的判定
+// template<class T>
+// struct is_map_container : std::false_type {};
+// template<class Key, class T, class Compare, class Alloc>
+// struct is_map_container<std::map<Key, T, Compare, Alloc>> : std::true_type {};
+// template<class Key, class T, class Hash, class Eq, class Alloc>
+// struct is_map_container<std::unordered_map<Key, T, Hash, Eq, Alloc>> : std::true_type {};
+
+// vector / list以及类似容器(去除 String )
 template<class T>
+concept SequenceContainer =
+    requires(T c, typename T::value_type v) {
+        { c.push_back(v) };
+    }
+    && (!std::same_as<std::remove_cvref_t<T>, std::string>);
+// set / unordered_set 以及类似容器(去除 Map )
+template<class T>
+concept SetContainer =
+    requires(T c, typename T::value_type v) {
+        { c.insert(v) };
+    }
+    && (!requires { typename T::mapped_type; });
+// map / unordered_map 以及类map容器
+template<class T>
+concept StringKeyMapContainer =
+    requires {
+        // 确认key和mapped的存在性
+        typename T::key_type;
+        typename T::mapped_type;
+    }
+    // 强制 key_type 必须是 std::string
+    && std::same_as<typename T::key_type, std::string>
+    // 像标准 map 一样使用
+    && requires(T c, const std::string& k) {
+        { c[k] }    -> std::same_as<typename T::mapped_type&>;
+    };
+
+// 统一 Sequence 和 Set
+template<class T>
+concept InsertableContainer =
+    SequenceContainer<T> || SetContainer<T>;
+
+template<InsertableContainer Container>
+class Lexical_cast<std::string, Container> {
+public:
+    Container operator()(const std::string& str) {
+        YAML::Node node = YAML::Load(str);
+        Container container;
+        // yaml不支持set类型的转换
+        // Container container = node.as<Container>();
+        std::stringstream ss;
+        using ValueType = typename Container::value_type;
+        for (size_t i = 0; i < node.size(); ++i) {
+            ss.str("");
+            ss.clear();
+            ss << node[i];
+            ValueType value =
+                Lexical_cast<std::string, ValueType>()(ss.str());
+            // 使用 if constexpr 进行区分
+            if constexpr (SequenceContainer<Container>) {
+                container.push_back(value);
+            } else {
+                container.insert(value);
+            }
+        }
+        return container;
+    }
+};
+
+template<InsertableContainer Container>
+class Lexical_cast<Container, std::string> {
+public:
+    std::string operator()(const Container& v) {
+        YAML::Node node(YAML::NodeType::Sequence);
+        using ValueType = typename Container::value_type;
+        for (auto& i : v) {
+            node.push_back(YAML::Load(Lexical_cast<ValueType, std::string>()(i)));
+        }
+        std::stringstream ss;
+        ss << node;
+        return ss.str();
+    }
+};
+
+template<StringKeyMapContainer Container>
+class Lexical_cast<std::string, Container> {
+public:
+    Container operator()(const std::string& v) {
+        YAML::Node node = YAML::Load(v);
+        // yaml原生支持map
+        Container container = node.as<Container>();
+        // std::stringstream ss;
+        // for(auto it = node.begin();
+        //         it != node.end(); ++it) {
+        //     using MappedType = typename Container::mapped_type;
+        //     ss.str("");
+        //     ss.clear();
+        //     ss << it->second;
+        //     container.insert(std::make_pair(it->first.Scalar(),
+        //                 Lexical_cast<std::string, MappedType>()(ss.str())));
+        // }
+        return container;
+    }
+};
+
+template<StringKeyMapContainer Container>
+class Lexical_cast<Container, std::string> {
+public:
+    std::string operator()(const Container& v) {
+        // YAML::Node node(YAML::NodeType::Map);
+        // for(auto& i : v) {
+        //     using MappedType = typename Container::mapped_type;
+        //     node[i.first] = YAML::Load(Lexical_cast<MappedType, std::string>()(i.second));
+        // }
+        // yaml原生支持map
+        YAML::Node node(v);
+        std::stringstream ss;
+        ss << node;
+        return ss.str();
+    }
+};
+
+
+
+// 未使用 if constexpr 
+// 使用concept + requires进行偏特化判定
+// template<SequenceContainer Container>
+// class Lexical_cast<std::string, Container> {
+// public:
+//     // 可递归使用，将复杂类型转化为复杂类型的数组，逐渐拆分
+//     Container operator()(const std::string& str) {
+//         YAML::Node node =  YAML::Load(str);
+//         Container container;
+//         std::stringstream ss;
+//         // 其为数组 node.Type() == 3
+//         for(size_t i = 0; i < node.size(); i++) {
+//             using ValueType = typename Container::value_type;
+//             ss.str("");
+//             ss.clear();
+//             ss << node[i];
+//             // 再次使用模板将string转为T，若T为复杂类型，则是调用偏特化模板
+//             // 类似递归调用，只不过这里是模板递归
+//             container.push_back(Lexical_cast<std::string, ValueType>()(ss.str()));
+//         }
+//         return container;
+//     }
+// };
+// template<SequenceContainer Container>
+// class Lexical_cast<Container, std::string> {
+// public:
+//     std::string operator()(const Container& v) {
+//         YAML::Node node(YAML::NodeType::Sequence);
+//         for(auto& i : v) {
+//             using ValueType = typename Container::value_type;
+//             // 若T为复杂类型，则是调用偏特化模板
+//             // 类似递归调用，只不过这里是模板递归
+//             node.push_back(YAML::Load(Lexical_cast<ValueType, std::string>()(i)));
+//         }
+//         std::stringstream ss;
+//         ss << node;
+//         return ss.str();
+//     }
+// };
+// template<SetContainer Container>
+// class Lexical_cast<std::string, Container> {
+// public:
+//     // 可递归使用，将复杂类型转化为复杂类型的数组，逐渐拆分
+//     Container operator()(const std::string& str) {
+//         YAML::Node node =  YAML::Load(str);
+//         Container container;
+//         std::stringstream ss;
+//         // 其为数组 node.Type() == 3
+//         for(size_t i = 0; i < node.size(); i++) {
+//             using ValueType = typename Container::value_type;
+//             ss.str("");
+//             ss.clear();
+//             ss << node[i];
+//             // 再次使用模板将string转为T，若T为复杂类型，则是调用偏特化模板
+//             // 类似递归调用，只不过这里是模板递归
+//             container.insert(Lexical_cast<std::string, ValueType>()(ss.str()));
+//         }
+//         return container;
+//     }
+// };
+// template<SetContainer Container>
+// class Lexical_cast<Container, std::string> {
+// public:
+//     std::string operator()(const Container& v) {
+//         YAML::Node node(YAML::NodeType::Sequence);
+//         for(auto& i : v) {
+//             using ValueType = typename Container::value_type;
+//             // 若T为复杂类型，则是调用偏特化模板
+//             // 类似递归调用，只不过这里是模板递归
+//             node.push_back(YAML::Load(Lexical_cast<ValueType, std::string>()(i)));
+//         }
+//         std::stringstream ss;
+//         ss << node;
+//         return ss.str();
+//     }
+// };
+
+
+
+// FromStr T operator()(const std::string& str) | str -> T
+// Tostr std::string operator()(const T&) | T -> str
+// 后面两个使用默认值，默认是字符串的转换,且这个默认值是Lexical_cast的模板特化
+template<class T, class FromStr = Lexical_cast<std::string, T>
+                , class ToStr = Lexical_cast<T, std::string> >
 class ConfigVar : public ConfigVarBase {
 public:
     // 在类内部 ConfigVar 等价于 ConfigVar<T>
@@ -53,7 +292,10 @@ public:
     // T类型转字符串
     std::string toString() override {
         try {
-            return boost::lexical_cast<std::string>(m_val);
+            // return boost::lexical_cast<std::string>(m_val);
+            // 替换为统一接口
+            // ToStr()(m_val)等价于Lexical_cast<T, std::string>(m_val)，是一个临时对象在调用()函数
+            return ToStr()(m_val);
         }catch(std::exception& e) {
             SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "ConfigVar::fromString exception "
                 << e.what() << " convert: " << typeid(m_val).name() << " to string";
@@ -64,7 +306,9 @@ public:
     // 字符串转T类型
     bool fromString(const std::string& val) override {
         try {
-            m_val = boost::lexical_cast<T>(val);
+            // m_val = boost::lexical_cast<T>(val);
+            // 替换为统一接口
+            setValue(FromStr()(val));
             return true;
         }catch(std::exception& e) {
             SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "ConfigVar::fromString exception "
@@ -73,8 +317,8 @@ public:
         return false;
     }
     // 返回const引用
-    const T& getVal() const {return m_val;}
-    void setVal(const T& val) { m_val = val;}
+    const T& getValue() const {return m_val;}
+    void setValue(const T& val) { m_val = val;}
 private:
     T m_val;
 };
@@ -127,7 +371,11 @@ public:
         // it->second 是 shared_ptr<ConfigVarBase>
         // 必须进行 “显示转换” 才能转换成ConfigVar<T>，不能隐式转换
         // 类型错误不会被“偷偷转换”，会返回nullptr
-        return std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
+        typename ConfigVar<T>::ptr ret = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
+        if(!ret) {
+            SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name:" << name << "already exists and the content will be revised.";
+        }
+        return ret;
     }
 
     /**
@@ -154,8 +402,5 @@ private:
 };
 
 }
-
-
-
 
 #endif
