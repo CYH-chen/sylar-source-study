@@ -14,6 +14,9 @@ sylar::ConfigVar<int>::ptr g_int_value_config =
     // 显示指定<int>，也可不指定可自动推断
     sylar::Config::Lookup<int>("system.port", (int)8080, "system port");
 
+sylar::ConfigVar<float>::ptr g_muiti_error_value_config =
+    sylar::Config::Lookup("system.port", (float)10.2f, "system value");
+
 sylar::ConfigVar<float>::ptr g_float_value_config =
     sylar::Config::Lookup("system.value", (float)10.2f, "system value");
 
@@ -107,7 +110,7 @@ void test_config() {
     XX_M(g_str_int_unordered_map_value_config, int_unordered_map, before);
 
     YAML::Node node = YAML::LoadFile("../bin/conf/log.yml");
-    sylar::Config::LoadFromFile(node);
+    sylar::Config::LoadFromYaml(node);
 
     XX(g_int_vec_value_config, int_vector, after);
     XX(g_int_list_value_config, int_list, after);
@@ -119,13 +122,104 @@ void test_config() {
     // 基本类型的config转换
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: " << g_int_value_config->getValue();
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: " << g_float_value_config->toString();
-
 #undef XX
 }
+
+
+class Person {
+public:
+    Person() {};
+    std::string m_name;
+    int m_age = 0;
+    bool m_sex = 0;
+
+    std::string toString() const {
+        std::stringstream ss;
+        ss << "[Person name=" << m_name
+           << " age=" << m_age
+           << " sex=" << m_sex
+           << "]";
+        return ss.str();
+    }
+
+    bool operator==(const Person& oth) const {
+        return m_name == oth.m_name
+            && m_age == oth.m_age
+            && m_sex == oth.m_sex;
+    }
+};
+
+namespace sylar {
+
+// 全特化对自定义类进行序列化和反序列化
+template<>
+class Lexical_cast<std::string, Person> {
+public:
+    Person operator()(const std::string& v) {
+        YAML::Node node = YAML::Load(v);
+        Person p;
+        p.m_name = node["name"].as<std::string>();
+        p.m_age = node["age"].as<int>();
+        p.m_sex = node["sex"].as<bool>();
+        return p;
+    }
+};
+
+template<>
+class Lexical_cast<Person, std::string> {
+public:
+    std::string operator()(const Person& p) {
+        YAML::Node node;
+        node["name"] = p.m_name;
+        node["age"] = p.m_age;
+        node["sex"] = p.m_sex;
+        std::stringstream ss;
+        ss << node;
+        return ss.str();
+    }
+};
+
+}
+// 自定义类型测试
+sylar::ConfigVar<Person>::ptr g_person =
+    sylar::Config::Lookup("class.person", Person(), "system person");
+// Map里套自定义类型测试
+sylar::ConfigVar<std::map<std::string, Person> >::ptr g_person_map =
+    sylar::Config::Lookup("class.map", std::map<std::string, Person>(), "system person");
+
+// 先加了一层vector，再在vector里加Map，多嵌套了两层
+sylar::ConfigVar<std::map<std::string, std::vector<std::map<std::string, Person>> > >::ptr g_person_vec_map =
+    sylar::Config::Lookup("class.vec_map", std::map<std::string, std::vector<std::map<std::string, Person>> >(), "system person");
+
+void test_class() {
+    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: " << g_person->getValue().toString() << " - " << g_person->toString();
+    
+#define XX_PM(g_var, prefix) \
+    { \
+        auto m = g_var->getValue(); \
+        for(auto& i : m) { \
+            SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) <<  prefix << ": " << i.first << " - " << i.second.toString(); \
+        } \
+        SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) <<  prefix << ": size=" << m.size() << " - " << g_var->toString(); \
+    }
+    XX_PM(g_person_map, "class.map before");
+    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: map_vec_person - " << g_person_vec_map->toString();
+
+    YAML::Node root = YAML::LoadFile("../bin/conf/log.yml");
+    sylar::Config::LoadFromYaml(root);
+
+    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: " << g_person->getValue().toString() << " - " << g_person->toString();
+    XX_PM(g_person_map, "class.map after");
+    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: map_vec_person - " << g_person_vec_map->toString();
+#undef XX
+}
+
 
 int main(int argc, char* argv[]) {
     // test_yaml();
 
-    test_config();
+    // test_config();
+
+    test_class();
     return 0;
 }

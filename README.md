@@ -34,7 +34,7 @@ Tips：`yaml-cpp`和`yaml-cpp-devel`是两个独立的包，前者仅提供**运
 尝试使用了一些C++11之后的语法进行改写。
 下列将列出一些较大改动：
 ## 配置系统
-*  > 注意：yaml库原生就支持大部分类型转换，而`set`、`unordered_set`类型是不支持的。因此也可以自己补一个 `YAML::convert<std::set<T>>`，其余用yaml库的`node.as< >()`进行转换。不过下述的模板类的结构是不变的，变的仅仅是对具体数据的处理细节。
+*  > 注意：yaml库原生就支持大部分类型转换，但是`set`、`unordered_set`以及**自定义类型**是不支持的。因此也可以自己补 `YAML::convert< std::set<T> >`，然后用yaml库的`node.as< >()`进行转换。不过下述的模板类的结构是不变的，变的仅仅是对具体数据的处理细节。
 ### 条件模板特化(C++ 20之前)
 在[ sylar 的配置系统 config.h ](https://github.com/sylar-yin/sylar/blob/master/sylar/config.h)中，使用了**模板偏特化**来处理不同类型配置项的**序列化和反序列化**。对于普通类型（`int`,`float`等）使用主模板中的`boost::lexical_cast<T>(val)`;而对于复杂类型(`vector`,`set`等)使用模板偏特化进行特殊处理。
 可以发现`vector`,`list`使用了共同的`push_back`操作；同理`set`,`unordered_set`使用了相同的`insert`操作。在这几个类型中，重载的函数体几乎一模一样，仅仅是容器不同，因此在这里考虑使用**条件模板特化**。

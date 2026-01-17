@@ -40,13 +40,16 @@ public:
 
     virtual std::string toString() = 0;
     virtual bool fromString(const std::string& val) = 0;
+    // 虚函数，map里的配置类才能调用他们的方法
+    virtual std::string getTypeName() const = 0;
 protected:
     std::string m_name;
     std::string m_description;
 };
 
 // F from_type; T to_type
-template<class F, class T, class Enable = void>
+// template<class F, class T, class Enable = void>
+template<class F, class T>
 class Lexical_cast {
 public:
     // 从 F -> T 重载()运算符
@@ -159,18 +162,20 @@ class Lexical_cast<std::string, Container> {
 public:
     Container operator()(const std::string& v) {
         YAML::Node node = YAML::Load(v);
-        // yaml原生支持map
-        Container container = node.as<Container>();
-        // std::stringstream ss;
-        // for(auto it = node.begin();
-        //         it != node.end(); ++it) {
-        //     using MappedType = typename Container::mapped_type;
-        //     ss.str("");
-        //     ss.clear();
-        //     ss << it->second;
-        //     container.insert(std::make_pair(it->first.Scalar(),
-        //                 Lexical_cast<std::string, MappedType>()(ss.str())));
-        // }
+        Container container;
+        // // yaml原生支持map
+        // 但map里不能包含不支持的类型，比如自定义类
+        // Container container = node.as<Container>();
+        std::stringstream ss;
+        for(auto it = node.begin();
+                it != node.end(); ++it) {
+            using MappedType = typename Container::mapped_type;
+            ss.str("");
+            ss.clear();
+            ss << it->second;
+            container.insert(std::make_pair(it->first.Scalar(),
+                        Lexical_cast<std::string, MappedType>()(ss.str())));
+        }
         return container;
     }
 };
@@ -179,13 +184,14 @@ template<StringKeyMapContainer Container>
 class Lexical_cast<Container, std::string> {
 public:
     std::string operator()(const Container& v) {
-        // YAML::Node node(YAML::NodeType::Map);
-        // for(auto& i : v) {
-        //     using MappedType = typename Container::mapped_type;
-        //     node[i.first] = YAML::Load(Lexical_cast<MappedType, std::string>()(i.second));
-        // }
-        // yaml原生支持map
-        YAML::Node node(v);
+        YAML::Node node(YAML::NodeType::Map);
+        for(auto& i : v) {
+            using MappedType = typename Container::mapped_type;
+            node[i.first] = YAML::Load(Lexical_cast<MappedType, std::string>()(i.second));
+        }
+        // // yaml原生支持map
+        // 但map里不能包含不支持的类型，比如自定义类
+        // YAML::Node node(v);
         std::stringstream ss;
         ss << node;
         return ss.str();
@@ -312,13 +318,16 @@ public:
             return true;
         }catch(std::exception& e) {
             SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "ConfigVar::fromString exception "
-                << e.what() << " convert: string to " << typeid(m_val).name();
+                << e.what() << " convert: string to " << typeid(m_val).name()
+                << " - string_val: " << val;
         }
         return false;
     }
     // 返回const引用
     const T& getValue() const {return m_val;}
     void setValue(const T& val) { m_val = val;}
+
+    std::string getTypeName() const override { return typeid(T).name();}
 private:
     T m_val;
 };
@@ -339,11 +348,20 @@ public:
     static typename ConfigVar<T>::ptr Lookup(const std::string& name,
             const T& default_val, const std::string& description) {
         // 调用时必须显式指定模板参数T，才能识别对应函数
-        auto temp = Lookup<T>(name);
-        // 如果是nullptr代表没有，或者类型错误；反之则找到
-        if(temp) {
-            SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name:" << name << " exists";
-            return temp;
+        // auto temp = Lookup<T>(name);
+        // 防止 类型错误 当成了 name不存在
+        auto it = s_datas.find(name);
+        if(it != s_datas.end()) {
+            auto tmp = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
+            if(tmp) {
+                SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists";
+                return tmp;
+            } else {
+                SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists but type not "
+                        << typeid(T).name() << " real_type=" << it->second->getTypeName()
+                        << " " << it->second->toString();
+                return nullptr;
+            }
         }
 
         // find_first_not_of()若找到，则返回位置索引；若找不到，即全部字符都合法，则返回std::string::npos
@@ -373,7 +391,8 @@ public:
         // 类型错误不会被“偷偷转换”，会返回nullptr
         typename ConfigVar<T>::ptr ret = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
         if(!ret) {
-            SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name:" << name << "already exists and the content will be revised.";
+            // 类型转换错误，报错
+            SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "Lookup name:" << name << "already exists and the content will be revised.";
         }
         return ret;
     }
@@ -383,7 +402,7 @@ public:
      * 
      * @param node YAML的Node节点
      */
-    static void LoadFromFile(const YAML::Node& node);
+    static void LoadFromYaml(const YAML::Node& node);
     /**
      * @brief 查找配置参数
      * 
