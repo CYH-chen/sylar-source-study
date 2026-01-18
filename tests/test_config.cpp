@@ -192,6 +192,13 @@ sylar::ConfigVar<std::map<std::string, std::vector<std::map<std::string, Person>
     sylar::Config::Lookup("class.vec_map", std::map<std::string, std::vector<std::map<std::string, Person>> >(), "system person");
 
 void test_class() {
+
+    // 在value更新时会调用，before后，after前，在sylar::Config::LoadFromYaml(root)的时候
+    g_person->addListener([](const Person& old_value, const Person& new_value){
+            SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "old_value=" << old_value.toString()
+                    << " new_value=" << new_value.toString();
+        });
+
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: " << g_person->getValue().toString() << " - " << g_person->toString();
     
 #define XX_PM(g_var, prefix) \

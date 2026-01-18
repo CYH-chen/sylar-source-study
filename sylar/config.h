@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <concepts>
+#include <functional>
 #include "log.h"
 
 namespace sylar {
@@ -288,6 +289,9 @@ class ConfigVar : public ConfigVarBase {
 public:
     // 在类内部 ConfigVar 等价于 ConfigVar<T>
     typedef std::shared_ptr<ConfigVar> ptr;
+    // 定义配置事件的接口
+    typedef std::function<void (const T& old_value, const T& new_value) > on_change_cb;
+
     ConfigVar(const std::string& name
             ,const T& default_val
             ,const std::string& decription = "") 
@@ -325,11 +329,57 @@ public:
     }
     // 返回const引用
     const T& getValue() const {return m_val;}
-    void setValue(const T& val) { m_val = val;}
-
+    void setValue(const T& val) {
+        if( val == m_val ) {
+            return;
+        }
+        // 逐个通知
+        for(auto& i : m_cbs) {
+            i.second(m_val, val);
+        }
+        m_val = val;
+    }
+    // 返回T的类型名
     std::string getTypeName() const override { return typeid(T).name();}
+
+    uint64_t addListener(on_change_cb cb) {
+        // s_fun_id转移到类成员变量，方便clear的时候清空
+        // static uint64_t s_fun_id = 0;
+        ++m_fun_id;
+        m_cbs[m_fun_id] = cb;
+
+        SYLAR_LOG_DEBUG(SYLAR_LOG_ROOT()) << getTypeName() << ": An listener has been added.";
+        return m_fun_id;
+    }
+
+    void delListener(uint64_t key) {
+        m_cbs.erase(key);
+        SYLAR_LOG_DEBUG(SYLAR_LOG_ROOT()) << getTypeName() << ": An listener has been erased.";
+    }
+
+    on_change_cb getListener(uint64_t key) {
+        auto it = m_cbs.find(key);
+        return it == m_cbs.end() ? nullptr : it->second;
+    }
+
+    void clearListener() {
+        m_cbs.clear();
+        m_fun_id = 0;
+        SYLAR_LOG_DEBUG(SYLAR_LOG_ROOT()) << getTypeName() << ": All listeners have been cleared.";
+    }
 private:
     T m_val;
+    /**
+     * @brief 变更回调数组，通过key来确定function
+     * 回调函数没有办法比较，即不能直接确定是否为同样的回调函数，固用map而不是用vector来存
+     * uint64_t，要求唯一，使用hash确保唯一 
+     */
+    std::map<uint64_t, on_change_cb> m_cbs;
+    /**
+     * @brief 回调函数的key值
+     * 
+     */
+    uint64_t m_fun_id = 0;
 };
 
 // 管理类，类似LoggerMgr
@@ -349,7 +399,7 @@ public:
             const T& default_val, const std::string& description) {
         // 调用时必须显式指定模板参数T，才能识别对应函数
         // auto temp = Lookup<T>(name);
-        // 防止 类型错误 当成了 name不存在
+        // 防止把“类型错误”当成了 name 不存在
         auto it = s_datas.find(name);
         if(it != s_datas.end()) {
             auto tmp = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
