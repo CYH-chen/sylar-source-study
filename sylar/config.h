@@ -289,7 +289,8 @@ class ConfigVar : public ConfigVarBase {
 public:
     // 在类内部 ConfigVar 等价于 ConfigVar<T>
     typedef std::shared_ptr<ConfigVar> ptr;
-    // 定义配置事件的接口
+    // 定义配置事件的接口，一个“当值发生变化时被调用的回调函数类型”
+    // 观察者模式（函数式版本）
     typedef std::function<void (const T& old_value, const T& new_value) > on_change_cb;
 
     ConfigVar(const std::string& name

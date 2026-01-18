@@ -8,6 +8,8 @@
 #include <iostream>
 #include "../sylar/config.h"
 #include "../sylar/log.h"
+// 测试yaml的路径
+const std::string yamlPath = "../bin/conf/test.yml";
 
 // 初始化  /  查找对应字段
 sylar::ConfigVar<int>::ptr g_int_value_config =
@@ -72,7 +74,7 @@ void print_yaml(const YAML::Node& node, int level) {
 }
 
 void test_yaml() {
-    YAML::Node node = YAML::LoadFile("../bin/conf/log.yml");
+    YAML::Node node = YAML::LoadFile(yamlPath);
 
     // SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << node;
     print_yaml(node, 0);
@@ -109,7 +111,7 @@ void test_config() {
     XX_M(g_str_int_map_value_config, int_map, before);
     XX_M(g_str_int_unordered_map_value_config, int_unordered_map, before);
 
-    YAML::Node node = YAML::LoadFile("../bin/conf/log.yml");
+    YAML::Node node = YAML::LoadFile(yamlPath);
     sylar::Config::LoadFromYaml(node);
 
     XX(g_int_vec_value_config, int_vector, after);
@@ -212,7 +214,7 @@ void test_class() {
     XX_PM(g_person_map, "class.map before");
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: map_vec_person - " << g_person_vec_map->toString();
 
-    YAML::Node root = YAML::LoadFile("../bin/conf/log.yml");
+    YAML::Node root = YAML::LoadFile(yamlPath);
     sylar::Config::LoadFromYaml(root);
 
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: " << g_person->getValue().toString() << " - " << g_person->toString();

@@ -526,11 +526,63 @@ LoggerManager::LoggerManager() {
     m_root = std::make_shared<Logger>();
     // m_root->addAppender(LogAppender::ptr(new StdoutLogAppender));
     m_root->addAppender(std::make_shared<StdoutLogAppender>());
+    // 根据配置文件初始化
+    init();
 }
 
 Logger::ptr LoggerManager::getLogger(const std::string& loggerName) {
     auto it = m_loggers.find(loggerName);
-    return it == m_loggers.end() ?  m_root : it->second;
+    // 找不到Logger直接抛出异常
+    if(it == m_loggers.end()) {
+        const std::source_location& loc = std::source_location::current();
+        throw std::out_of_range("LoggerName not found: " + loggerName +
+        " | file name: " + loc.file_name() + ":" + std::to_string(loc.line()) +
+        " | function name: " + loc.function_name() + ")");
+    }
+    return it->second;
+}
+
+struct LogAppenderDefine {
+    int type = 0; //1 File, 2 Stdout
+    LogLevel::Level level = LogLevel::UNKNOW;
+    std::string formatter;
+    std::string fileName;
+
+    bool operator==(const LogAppenderDefine& oth) const {
+        return type == oth.type
+            && level == oth.level
+            && formatter == oth.formatter
+            && fileName == oth.fileName;
+    }
+};
+
+struct LogDefine {
+    std::string name;
+    LogLevel::Level level = LogLevel::UNKNOW;
+    std::string formatter;
+    std::vector<LogAppenderDefine> appenders;
+
+    bool operator==(const LogDefine& oth) const {
+        return name == oth.name
+            && level == oth.level
+            && formatter == oth.formatter
+            && appenders == appenders;
+    }
+
+    // 由于要放在set的红黑树里，要重载 < 符号判断大小
+    // unordered_set要实现hash更麻烦
+    bool operator<(const LogDefine& oth) const {
+        // 字符串比较，得到两个字符串的字典序关系
+        return name < oth.name;
+    }
+
+    bool isValid() const {
+        return !name.empty();
+    }
+};
+
+void LoggerManager::init()  {
+
 }
 
 }

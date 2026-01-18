@@ -17,6 +17,9 @@
 #include <vector>
 #include <map>
 #include <stdarg.h>
+#include <stdexcept>
+// C++20中获取行号 / 文件 / 函数信息的库
+#include <source_location>
 #include "util.h"
 #include "singleton.h"
 
@@ -31,8 +34,8 @@
 #define SYLAR_LOG_LEVEL(logger , level) \
     if(logger->getLevel() <= level) \
         sylar::LogEventWrap(logger, sylar::LogEvent::ptr(new sylar::LogEvent( \
-            logger->getName(), level, __FILE__, __LINE__, 0, sylar::GetThreadId(), \
-            sylar::GetFiberId(), time(0)))).getSS()
+            logger->getName(), level, std::source_location::current().file_name(), std::source_location::current().line(), \
+            0, sylar::GetThreadId(), sylar::GetFiberId(), time(0)))).getSS()
 
 #define SYLAR_LOG_DEBUG(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::DEBUG)
 #define SYLAR_LOG_INFO(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::INFO)
@@ -56,6 +59,8 @@
 
 // 宏定义简化获取LoggerManager中默认日志器的接口
 #define SYLAR_LOG_ROOT() sylar::LoggerMgr::GetInstance()->getRoot()
+// 根据名称name获取日志器
+#define SYLAR_LOG_NAME(name) sylar::LoggerMgr::GetInstance()->getLogger(name)
 
 namespace sylar {
 
@@ -63,6 +68,7 @@ namespace sylar {
 class LogLevel{
 public:
     enum Level {
+        UNKNOW = 0,
         DEBUG = 1,
         INFO = 2,
         WARN = 3,

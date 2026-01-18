@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
     SYLAR_LOG_FMT_ERROR(log, "fmt宏定义： %s", "fmt测试");
 
-    // 这里会返回一个默认logger，即管理器中的默认logger: m_root
+    // 这里会报错，名字错误
     auto l = sylar::LoggerMgr::GetInstance()->getLogger("xx");
     SYLAR_LOG_WARN(l) << "LoggerMrg 测试";
     return 0;
