@@ -9,15 +9,17 @@
 #include "../sylar/config.h"
 #include "../sylar/log.h"
 // 测试yaml的路径
-const std::string yamlPath = "../bin/conf/test.yml";
+const std::string testPath = "../bin/conf/test.yml";
+const std::string logPath = "../bin/conf/log.yml";
 
 // 初始化  /  查找对应字段
 sylar::ConfigVar<int>::ptr g_int_value_config =
     // 显示指定<int>，也可不指定可自动推断
     sylar::Config::Lookup<int>("system.port", (int)8080, "system port");
 
-sylar::ConfigVar<float>::ptr g_muiti_error_value_config =
-    sylar::Config::Lookup("system.port", (float)10.2f, "system value");
+// 重复赋值测试
+// sylar::ConfigVar<float>::ptr g_muiti_error_value_config =
+//     sylar::Config::Lookup("system.port", (float)10.2f, "system value");
 
 sylar::ConfigVar<float>::ptr g_float_value_config =
     sylar::Config::Lookup("system.value", (float)10.2f, "system value");
@@ -74,7 +76,7 @@ void print_yaml(const YAML::Node& node, int level) {
 }
 
 void test_yaml() {
-    YAML::Node node = YAML::LoadFile(yamlPath);
+    YAML::Node node = YAML::LoadFile(testPath);
 
     // SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << node;
     print_yaml(node, 0);
@@ -111,7 +113,7 @@ void test_config() {
     XX_M(g_str_int_map_value_config, int_map, before);
     XX_M(g_str_int_unordered_map_value_config, int_unordered_map, before);
 
-    YAML::Node node = YAML::LoadFile(yamlPath);
+    YAML::Node node = YAML::LoadFile(testPath);
     sylar::Config::LoadFromYaml(node);
 
     XX(g_int_vec_value_config, int_vector, after);
@@ -214,7 +216,7 @@ void test_class() {
     XX_PM(g_person_map, "class.map before");
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: map_vec_person - " << g_person_vec_map->toString();
 
-    YAML::Node root = YAML::LoadFile(yamlPath);
+    YAML::Node root = YAML::LoadFile(testPath);
     sylar::Config::LoadFromYaml(root);
 
     SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "after: " << g_person->getValue().toString() << " - " << g_person->toString();
@@ -223,12 +225,28 @@ void test_class() {
 #undef XX
 }
 
+void test_log() {
+    static sylar::Logger::ptr system_log =SYLAR_LOG_NAME("system");
+    system_log->addAppender(std::make_shared<sylar::StdoutLogAppender>());
+    SYLAR_LOG_INFO(system_log) << "hello system" << std::endl;
+    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "before: " << SYLAR_LOG_TOYAMLSTRING();
+    YAML::Node root = YAML::LoadFile(logPath);
+    sylar::Config::LoadFromYaml(root);
+
+    SYLAR_LOG_WARN(SYLAR_LOG_ROOT()) << "root after: " << SYLAR_LOG_ROOT()->toYamlString();
+    SYLAR_LOG_INFO(SYLAR_LOG_NAME("system")) << "system after: " << SYLAR_LOG_NAME("system")->toYamlString();
+
+    SYLAR_LOG_INFO(system_log) << "system after: hello system" << std::endl;
+}
+
 
 int main(int argc, char* argv[]) {
     // test_yaml();
 
     // test_config();
 
-    test_class();
+    // test_class();
+
+    test_log();
     return 0;
 }

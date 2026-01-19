@@ -1,15 +1,23 @@
+# 如果appender无formatter，在其基类构造函数中有默认formatter参数
 logs:
     - name: root
       level: info
-      formatter: "%d%T%m%n"
-      appender:
+      appenders:
           - type: FileLogAppender
-            filename: log.txt
+            fileName: root.txt
+            level: warn
+            # formatter: "%d%T%m%n"
           - type: StdoutLogAppender
+            level: info
+            formatter: "%d%T%m%n"
     - name: system
       level: debug
-      formatter: "%d%T%m%n"
-      appender:
+      appenders:
           - type: FileLogAppender
-            filename: log.txt
+            fileName: system.txt
+            level: debug
+            formatter: "%d%T%m%n"
           - type: StdoutLogAppender
+            level: info
+            formatter: "%d%T%m%n"
+            

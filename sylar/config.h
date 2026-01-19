@@ -282,7 +282,7 @@ public:
 
 // FromStr T operator()(const std::string& str) | str -> T
 // Tostr std::string operator()(const T&) | T -> str
-// 后面两个使用默认值，默认是字符串的转换,且这个默认值是Lexical_cast的模板特化
+// 后面两个使用默认值，且这个默认值是Lexical_cast的对应模板
 template<class T, class FromStr = Lexical_cast<std::string, T>
                 , class ToStr = Lexical_cast<T, std::string> >
 class ConfigVar : public ConfigVarBase {
@@ -331,6 +331,7 @@ public:
     // 返回const引用
     const T& getValue() const {return m_val;}
     void setValue(const T& val) {
+        // 这里用了 == ，因此要求传入的 T 重载了 == 运算符
         if( val == m_val ) {
             return;
         }

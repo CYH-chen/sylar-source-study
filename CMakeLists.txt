@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0)
 project(sylar-source-study)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS}-rdynamic -O3 -fPIC -ggdb -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS}-rdynamic -O0 -fPIC -ggdb -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
 
 # 在配置系统config.h中用了inline，故标准为17
 set(CMAKE_CXX_STANDARD 20)
@@ -22,10 +22,10 @@ target_link_libraries(sylar PUBLIC yaml-cpp)
 # 而yaml-cpp则非header-only，需要链接
 find_package(yaml-cpp REQUIRED)
 
-add_executable(test tests/test.cpp)
-# add_dependencies(test sylar)
-# target_link_libraries 本身就会建立构建顺序依赖
-target_link_libraries(test sylar)
+# add_executable(test tests/test.cpp)
+# # add_dependencies(test sylar)
+# # target_link_libraries 本身就会建立构建顺序依赖
+# target_link_libraries(test sylar)
 
 add_executable(test_config tests/test_config.cpp)
 target_link_libraries(test_config sylar)

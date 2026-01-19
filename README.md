@@ -4,7 +4,7 @@
 - [改动](#改动)
   - [日志系统](#日志系统)
     - [class](#class)
-    - [未定义行为](#未定义行为)
+    - [LoggerManager::getLogger](#loggermanagergetlogger)
   - [配置系统](#配置系统)
     - [条件模板特化](#条件模板特化)
     - [`concept + requires` + `if constexpr`](#concept--requires--if-constexpr)
@@ -37,15 +37,9 @@ Tips：`yaml-cpp`和`yaml-cpp-devel`是两个独立的包，前者仅提供**运
 以下列出一些**改动（部分）**：
 ## 日志系统
 ### class
-修改了一些类中的成员变量和函数行为，使得在我的视角下类的关系更为清晰。
-### 未定义行为
-比如在`LoggerManager::getLogger`中，sylar的做法是没有找到`name`对应的logger就返回一个root。我改为直接抛出一个异常。其中用了C++20引入的`std::source_location`,在不使用宏的情况下，自动获取“调用点”的源码信息（文件、行号、函数名等）。
-```cpp
-throw std::out_of_range("LoggerName not found: " + loggerName +
-        ". detail: (" + loc.file_name() + ":" + std::to_string(loc.line()) +
-        ", " + loc.function_name() + ")");
-```
-
+修改了一些类中的成员变量和函数行为，使得在我的视角下类的关系更为清晰。比如`formatter`只和`appender`绑定，`logger`只负责日志级别过滤和路由。
+### LoggerManager::getLogger
+不使用root对代替新注册的logger进行输出，而是直接不管，新创建的logger没有appender，无输出地。
 ## 配置系统
 *  > 注意：yaml库原生就支持大部分类型转换，但是`set`、`unordered_set`以及**自定义类型**是不支持的。因此也可以自己补 `YAML::convert< std::set<T> >`，然后用yaml库的`node.as< >()`进行转换。不过下述的模板类的结构是不变的，变的仅仅是对具体数据的处理细节。
 ### 条件模板特化

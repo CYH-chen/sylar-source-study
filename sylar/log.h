@@ -16,8 +16,8 @@
 #include <iostream>
 #include <vector>
 #include <map>
+// 可变参数
 #include <stdarg.h>
-#include <stdexcept>
 // C++20中获取行号 / 文件 / 函数信息的库
 #include <source_location>
 #include "util.h"
@@ -61,7 +61,10 @@
 #define SYLAR_LOG_ROOT() sylar::LoggerMgr::GetInstance()->getRoot()
 // 根据名称name获取日志器
 #define SYLAR_LOG_NAME(name) sylar::LoggerMgr::GetInstance()->getLogger(name)
-
+// 删除日志器，删除之前先将其level赋值为UNKNOW,且清除appender
+#define SYLAR_LOG_ERASELOG(loggerName) sylar::LoggerMgr::GetInstance()->eraseLogger(loggerName)
+// 获取所有日志器信息转为yaml
+#define SYLAR_LOG_TOYAMLSTRING() sylar::LoggerMgr::GetInstance()->toYamlString()
 namespace sylar {
 
 // 日志级别
@@ -82,7 +85,7 @@ public:
      * @return const char* 
      */
     static const char* ToString(LogLevel::Level level);
-
+    static LogLevel::Level FromString(const std::string& str);
 };
 
 // 日志事件
@@ -148,8 +151,18 @@ public:
         virtual ~FormatItem() {}
         virtual void format(std::ostream& os, LogEvent::ptr event) = 0;
     };
-
-    // pattern的解析
+    /**
+     * @brief 是否有错误
+     * 
+     * @return true 有错误
+     * @return false 无错误
+     */
+    bool isError() const { return m_error;}
+    const std::string& getPattern() const { return m_pattern;}
+    /**
+     * @brief pattern的解析
+     * 
+     */
     void init();
 private:
     std::string m_pattern;
@@ -167,7 +180,7 @@ public:
 
     // 纯虚函数
     virtual void log(LogEvent::ptr event) = 0;
-
+    virtual std::string toYamlString() = 0;
      
     // 获取日志级别
     LogLevel::Level getLevel() const { return m_level;}
@@ -188,8 +201,9 @@ protected:
 class StdoutLogAppender : public LogAppender{
 public:
     typedef std::shared_ptr<StdoutLogAppender> ptr;
-    StdoutLogAppender();
+    StdoutLogAppender(LogFormatter::ptr formatter = std::make_shared<LogFormatter>());
     void log(LogEvent::ptr event) override;
+    std::string toYamlString() override;
 
 private:
 };
@@ -198,8 +212,9 @@ private:
 class FileLogAppender : public LogAppender{
 public:
     typedef std::shared_ptr<FileLogAppender> ptr;
-    FileLogAppender(const std::string& filename);
+    FileLogAppender(const std::string& filename, LogFormatter::ptr formatter = std::make_shared<LogFormatter>());
     void log(LogEvent::ptr event) override;
+    std::string toYamlString() override;
 
     // 重新打开文件，文件成功打开返回ture，反之false
     bool reopen();
@@ -219,9 +234,11 @@ public:
     void log(LogEvent::ptr event);
     // 自定level阈值的log（另一套方法）
     void log(LogLevel::Level level, LogEvent::ptr event);
+    std::string toYamlString();
 
     void addAppender(LogAppender::ptr appender);
     void delAppender(LogAppender::ptr appender);
+    void clearAppenders();
     LogLevel::Level getLevel() const { return m_level; }
     void setLevel(LogLevel::Level val) { m_level = val; }
     std::string getName() const { return m_name; }
@@ -238,8 +255,6 @@ private:
     LogLevel::Level m_level;     
     //Appender集合               
     std::list<LogAppender::ptr> m_appenders; 
-    // 有时不需要appender，直接用logformatter
-    LogFormatter::ptr m_formatter;   
 };
 
 class LogEventWrap {
@@ -260,9 +275,14 @@ class LoggerManager{
 public:
     LoggerManager();
     Logger::ptr getLogger(const std::string& loggerName);
+    /**
+     * @brief 软删除，将其level赋值为UNKNOW,且清除appender
+     * 防止失去管理
+     * @param loggerName Logger名
+     */
+    void eraseLogger(const std::string& loggerName);
+    std::string toYamlString();
 
-    // 方便直接根据配置文件进行初始化
-    void init();
     Logger::ptr getRoot() const { return m_root;}
 private:
     // logger集合，每个string对应一个logger 
@@ -274,6 +294,7 @@ private:
 // 包装类型名称LoggerMgr
 typedef sylar::Singleton<LoggerManager> LoggerMgr;
 
+// 在config.cpp中通过全局静态变量进行初始化
 }
 
 #endif
