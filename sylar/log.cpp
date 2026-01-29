@@ -1,6 +1,6 @@
 /**
  * @file log.cpp
- * @brief 日志系统实现
+ * @brief 日志模块实现
  * @version 0.1
  * @date 2026-01-13
  */
@@ -522,8 +522,9 @@ std::stringstream& LogEventWrap::getSS() {
  * 
  */
 
-LogAppender::LogAppender(LogFormatter::ptr formatter)
-    :m_formatter(formatter) {
+LogAppender::LogAppender(LogFormatter::ptr formatter, LogLevel::Level level)
+    :m_formatter(formatter)
+    ,m_level(level) {
 }
 
 StdoutLogAppender::StdoutLogAppender(LogFormatter::ptr formatter)

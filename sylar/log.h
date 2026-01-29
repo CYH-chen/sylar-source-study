@@ -1,6 +1,6 @@
 /**
  * @file log.h
- * @brief 日志系统
+ * @brief 日志模块
  * @version 0.1
  * @date 2026-01-13
  */
@@ -48,8 +48,8 @@
 #define SYLAR_LOG_FMT_LEVEL(logger, level, fmt, ...) \
     if(logger->getLevel() <= level) \
         sylar::LogEventWrap(logger, sylar::LogEvent::ptr(new sylar::LogEvent(logger->getName(), level, \
-                        __FILE__, __LINE__, 0, sylar::GetThreadId(),\
-                sylar::GetFiberId(), time(0)))).getEvent()->format(fmt, __VA_ARGS__)
+                        std::source_location::current().file_name(), std::source_location::current().line(), \
+                        0, sylar::GetThreadId(), sylar::GetFiberId(), time(0)))).getEvent()->format(fmt, __VA_ARGS__)
 
 #define SYLAR_LOG_FMT_DEBUG(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::DEBUG, fmt, __VA_ARGS__)
 #define SYLAR_LOG_FMT_INFO(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::INFO, fmt, __VA_ARGS__)
@@ -175,7 +175,7 @@ private:
 class LogAppender {
 public:
     typedef std::shared_ptr<LogAppender> ptr;
-    LogAppender(LogFormatter::ptr formatter);
+    LogAppender(LogFormatter::ptr formatter, LogLevel::Level level = LogLevel::DEBUG);
     virtual ~LogAppender() {}
 
     // 纯虚函数
@@ -189,12 +189,12 @@ public:
     void setFormatter(LogFormatter::ptr val) { m_formatter = val;}
     LogFormatter::ptr getFormatter() { return m_formatter; }
 protected:
+    // 日志格式器
+    LogFormatter::ptr m_formatter;
     // 默认为DEBUG
     // 通过level可以控制Appender不同的输出级别
     // 举例：比如fileAppender只输出高级别日志，而stdOutAppender输出全级别 
     LogLevel::Level m_level = LogLevel::DEBUG;
-    // 日志格式器
-    LogFormatter::ptr m_formatter;
 };
 
 //输出到控制台的Appender

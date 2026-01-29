@@ -1,6 +1,6 @@
 /**
  * @file config.h
- * @brief 配置系统
+ * @brief 配置模块
  * @version 0.1
  * @date 2026-01-13
  */
@@ -402,8 +402,8 @@ public:
         // 调用时必须显式指定模板参数T，才能识别对应函数
         // auto temp = Lookup<T>(name);
         // 防止把“类型错误”当成了 name 不存在
-        auto it = s_datas.find(name);
-        if(it != s_datas.end()) {
+        auto it = GetDatas().find(name);
+        if(it != GetDatas().end()) {
             auto tmp = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
             if(tmp) {
                 SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists";
@@ -426,7 +426,7 @@ public:
         // 没有错误，则创建
         // typename ConfigVar<T>::ptr v(new ConfigVar<T>(name, default_val, description));
         typename ConfigVar<T>::ptr v = std::make_shared<ConfigVar<T> >(name, default_val, description);
-        s_datas[name] = v;
+        GetDatas()[name] = v;
         return v;
     }
 
@@ -434,8 +434,8 @@ public:
     // 查找函数
     template<class T>
     static typename ConfigVar<T>::ptr Lookup(const std::string& name) {
-        auto it = s_datas.find(name);
-        if(it == s_datas.end()) {
+        auto it = GetDatas().find(name);
+        if(it == GetDatas().end()) {
             return nullptr;
         }
         // it->second 是 shared_ptr<ConfigVarBase>
@@ -464,12 +464,25 @@ public:
     static ConfigVarBase::ptr LookupBase(const std::string& name);
 
 private:
+    // /**
+    //  * @brief 统一存储所有配置项的容器（这里使用inline，不需要在.cpp中再定义）
+    //  * 类内的 static 数据成员：类内声明 ≠ 实体存在
+    //  * 必须在类外提供一次定义（除非是 inline 或 constexpr）
+    //  */
+    // inline static ConfigVarMap s_datas;
+
     /**
-     * @brief 统一存储所有配置项的容器（这里使用inline，不需要在.cpp中再定义）
-     * 类内的 static 数据成员：类内声明 ≠ 实体存在
-     * 必须在类外提供一次定义（除非是 inline 或 constexpr）
+     * @brief 获得静态变量配置项数据。
+     * 直接使用静态变量有风险，有可能使用Lookup的时候s-datas还未初始化，但构造配置项的变量先初始化的情况下会出问题。
+     * 因为静态变量初始化顺序是未知的，而使用静态函数返回静态函数内部的静态变量可以防止这个问题。
+     * 静态函数在第一次调用时才初始化，只要调用就会进行初始化。
+     * 
+     * @return ConfigVarMap& 
      */
-    inline static ConfigVarMap s_datas;
+    static ConfigVarMap& GetDatas() {
+        static ConfigVarMap s_datas;
+        return s_datas;
+    }
 };
 
 }

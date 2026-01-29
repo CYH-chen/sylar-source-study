@@ -237,6 +237,7 @@ void test_log() {
     SYLAR_LOG_INFO(SYLAR_LOG_NAME("system")) << "system after: " << SYLAR_LOG_NAME("system")->toYamlString();
 
     SYLAR_LOG_INFO(system_log) << "system after: hello system" << std::endl;
+    std::cout << "====================\nSYLAR_LOG_TOYAMLSTRING():\n" << SYLAR_LOG_TOYAMLSTRING() << std::endl;
 }
 
 

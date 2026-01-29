@@ -1,6 +1,6 @@
 /**
  * @file config.cpp
- * @brief 配置系统实现
+ * @brief 配置模块实现
  * @version 0.1
  * @date 2026-01-14
  */
@@ -12,8 +12,8 @@ namespace sylar {
 // Config::ConfigVarMap Config::s_datas;
 
 ConfigVarBase::ptr Config::LookupBase(const std::string& name) {
-    auto it = s_datas.find(name);
-    return it == s_datas.end() ? nullptr : it->second;
+    auto it = GetDatas().find(name);
+    return it == GetDatas().end() ? nullptr : it->second;
 }
 
 /**
