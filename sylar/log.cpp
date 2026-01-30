@@ -546,6 +546,9 @@ std::string StdoutLogAppender::toYamlString() {
 }
 
 void StdoutLogAppender::log(LogEvent::ptr event) {
+    // // 测试logger地址
+    // std::cout << "this logger @" << this;
+
     if(event->getLevel() >= m_level) {
         std::cout << m_formatter->format(event);
     }

@@ -13,10 +13,10 @@ logs:
     - name: system
       level: debug
       appenders:
-          - type: FileLogAppender
-            fileName: system.txt
-            level: debug
-            formatter: "%d%T%m%n"
+          # - type: FileLogAppender
+          #   fileName: system.txt
+          #   level: debug
+          #   formatter: "%d%T%m%n"
           - type: StdoutLogAppender
             level: info
             formatter: "%d%T%m%n"

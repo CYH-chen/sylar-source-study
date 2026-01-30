@@ -24,6 +24,33 @@ static thread_local std::string t_thread_name = "UNKNOW";
 // 通过单例模式获取全局唯一的数据
 static Logger::ptr g_logger = SYLAR_LOG_NAME("system");
 
+Semaphore::Semaphore(uint32_t count) {
+    if(sem_init(&m_semaphore, 0, count)) {
+        throw std::logic_error("sem_init error");
+    }
+}
+
+Semaphore::~Semaphore(){
+    sem_destroy(&m_semaphore);
+}
+
+void Semaphore::wait(){
+    // wait失败抛异常
+    if(sem_wait(&m_semaphore)) {
+        throw std::logic_error("sem_wait error");
+    }
+}
+
+void Semaphore::notify(){
+    // post失败抛异常
+    if(sem_post(&m_semaphore)) {
+        throw std::logic_error("sem_wait error");
+    }
+}
+
+
+
+
 Thread* Thread::GetThis() {
     return t_thread;
 }
@@ -47,7 +74,7 @@ void Thread::SetName(const std::string& name) {
 //         ↓
 // 真实的对象成员函数
 Thread::Thread(std::function<void()> cb, const std::string& name)     
-    :m_cb(cb)
+    :m_cb(std::move(cb))
     ,m_name(name) {
     if(name.empty()) {
         m_name = "UNKNOW";
@@ -64,6 +91,9 @@ Thread::Thread(std::function<void()> cb, const std::string& name)
             << " name=" << name;
         throw std::logic_error("pthread_create error");
     }
+    // 阻塞当前构造函数，确保创建的线程开始运行后，在退出构造函数。在run函数中会调用m_semaphore.notify()
+    // 保证构造线程类完成之前，线程一定开始运行了
+    m_semaphore.wait();
 }
 
 Thread::~Thread() {
@@ -88,6 +118,7 @@ void Thread::join() {
         // 要改为0，不然Segmentation fault (core dumped)
         // 因为此时join完毕，线程已经释放了，后面调用析构函数时，不能再次detach此线程
         m_thread = 0;
+        // 此时非joinable状态
     }
 }
 
@@ -107,6 +138,9 @@ void* Thread::run(void* arg) {
     cb.swap(t_thread->m_cb);
     // this只是裸指针，对引用计数无影响
     // run为static函数，因此即便Thread析构了，cb也仍然可以继续执行
+
+    // 构造函数可以退出
+    t_thread->m_semaphore.notify();
 
     cb();
     return 0;
