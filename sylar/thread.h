@@ -37,6 +37,7 @@ private:
     sem_t m_semaphore;
 };
 
+// 对互斥锁进行加锁和解锁的RAII对象
 template<class T>
 class ScopeLockImpl {
 public:
@@ -67,7 +68,7 @@ private:
     bool m_locked;
 };
 
-// 对写锁进行锁和解锁的RAII对象
+// 对写锁进行加锁和解锁的RAII对象
 template<class T>
 class ReadScopeLockImpl {
 public:
@@ -98,7 +99,7 @@ private:
     bool m_locked;
 };
 
-// 对读锁进行锁和解锁的RAII对象
+// 对读锁进行加锁和解锁的RAII对象
 template<class T>
 class WriteScopeLockImpl {
 public:
@@ -129,11 +130,28 @@ private:
     bool m_locked;
 };
 
+// 互斥锁
 class Mutex {
 public:
+    typedef ScopeLockImpl<Mutex> Lock;
 
+    Mutex() {
+        pthread_mutex_init(&m_mutex, nullptr);
+    }
+
+    ~Mutex() {
+        pthread_mutex_destroy(&m_mutex);
+    }
+
+    void lock() {
+        pthread_mutex_lock(&m_mutex);
+    }
+
+    void unlock() {
+        pthread_mutex_unlock(&m_mutex);
+    }
 private:
-
+    pthread_mutex_t m_mutex;
 };
 
 // 管理读写锁生命周期的RAII对象
@@ -166,6 +184,40 @@ public:
 private:
     pthread_rwlock_t m_lock;
 
+};
+
+/**
+ * @brief 由于互斥锁mutex在日志模块中需要频繁地切换内核态进行线程调度
+ * 导致运行速度比不使用锁降低了很多，因此考虑使用自旋锁(spinlock)。
+ * 因为日志模块的冲突等待时间少（日志输出快），同时冲突次数多。
+ * 适合使用自旋锁避免频繁进行用户态和内核态的切换
+ * 
+ * 使用spinlock提高写文件性能，从8M/s到20M/s。不加锁是100多M/s
+ * 
+ * 也可以尝试使用C++的atomic库的自旋锁
+ */
+class Spinlock {
+public:
+    typedef ScopeLockImpl<Spinlock> Lock;
+
+    Spinlock() {
+        pthread_spin_init(&m_mutex, 0);
+    }
+
+    ~Spinlock() {
+        pthread_spin_destroy(&m_mutex);
+    }
+
+    void lock() {
+        pthread_spin_lock(&m_mutex);
+    }
+
+    void unlock() {
+        pthread_spin_unlock(&m_mutex);
+    }
+private:
+    pthread_spinlock_t m_mutex;
+ 
 };
 
 class Thread {

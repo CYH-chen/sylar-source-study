@@ -3,7 +3,8 @@
 sylar::Logger::ptr g_logger = SYLAR_LOG_NAME("system");
 
 volatile int count = 0;
-sylar::RWMutex s_mutex;
+// sylar::RWMutex s_mutex;
+ sylar::Mutex s_mutex;
 
 void fun1() {
     SYLAR_LOG_INFO(g_logger) << "name: " << sylar::Thread::GetName()
@@ -13,8 +14,9 @@ void fun1() {
     for(int i = 0; i < 100000; ++i) {
         // 创建RAII对象进行加锁，局部变量在离开临界区后会自动析构释放锁
         // 比如此处：进入下一次循环之后自动调用析构函数解锁
-        sylar::RWMutex::WriteLock lock(s_mutex);
+        // sylar::RWMutex::WriteLock lock(s_mutex);
         // sylar::RWMutex::ReadLock lock(s_mutex);
+        sylar::Mutex::Lock lock(s_mutex);
         count++;
     }
 }

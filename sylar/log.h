@@ -22,6 +22,7 @@
 #include <source_location>
 #include "util.h"
 #include "singleton.h"
+#include "thread.h"
 
 /**
  * @brief 使用宏定义来简化写入日志内容的过程
@@ -134,6 +135,7 @@ private:
     std::stringstream m_ss;
 };
 
+// 日志格式化，创建后就不会修改，不需要锁
 class LogFormatter {
 public:
     typedef std::shared_ptr<LogFormatter> ptr;
@@ -175,6 +177,8 @@ private:
 class LogAppender {
 public:
     typedef std::shared_ptr<LogAppender> ptr;
+    typedef Spinlock MutexType;
+
     LogAppender(LogFormatter::ptr formatter, LogLevel::Level level = LogLevel::DEBUG);
     virtual ~LogAppender() {}
 
@@ -182,12 +186,14 @@ public:
     virtual void log(LogEvent::ptr event) = 0;
     virtual std::string toYamlString() = 0;
      
+    // level成员变量的锁可加可不加，因为是基础类型，只会导致值不准确
+    // 对于formatter成员变量而言，其中含有多个变量。如果在赋值时，指赋值了部分内容，此时发生线程切换，会导致严重的内存错误
     // 获取日志级别
     LogLevel::Level getLevel() const { return m_level;}
     // 设置日志级别
     void setLevel(LogLevel::Level val) { m_level = val;}
-    void setFormatter(LogFormatter::ptr val) { m_formatter = val;}
-    LogFormatter::ptr getFormatter() { return m_formatter; }
+    void setFormatter(LogFormatter::ptr val);
+    LogFormatter::ptr getFormatter();
 protected:
     // 日志格式器
     LogFormatter::ptr m_formatter;
@@ -195,6 +201,8 @@ protected:
     // 通过level可以控制Appender不同的输出级别
     // 举例：比如fileAppender只输出高级别日志，而stdOutAppender输出全级别 
     LogLevel::Level m_level = LogLevel::DEBUG;
+    // 互斥锁
+    MutexType m_mutex;
 };
 
 //输出到控制台的Appender
@@ -227,6 +235,7 @@ private:
 class Logger{
 public:
     typedef std::shared_ptr<Logger> ptr;
+    typedef Spinlock MutexType;
 
     Logger(const std::string& name = "root", LogLevel::Level level = LogLevel::DEBUG);
     // ~Logger();
@@ -241,6 +250,7 @@ public:
     void clearAppenders();
     LogLevel::Level getLevel() const { return m_level; }
     void setLevel(LogLevel::Level val) { m_level = val; }
+    // name认为是主键，不需要变，不加锁
     std::string getName() const { return m_name; }
 
     void debug(LogEvent::ptr event);
@@ -254,7 +264,9 @@ private:
     //日志级别                       
     LogLevel::Level m_level;     
     //Appender集合               
-    std::list<LogAppender::ptr> m_appenders; 
+    std::list<LogAppender::ptr> m_appenders;
+    // 互斥锁
+    MutexType m_mutex; 
 };
 
 class LogEventWrap {
@@ -273,6 +285,8 @@ private:
 // 负责管理Logger，需要Logger直接从里面取
 class LoggerManager{
 public:
+    typedef Spinlock MutexType;
+
     LoggerManager();
     Logger::ptr getLogger(const std::string& loggerName);
     /**
@@ -289,6 +303,7 @@ private:
     std::map<std::string, Logger::ptr> m_loggers;
     // 默认logger
     Logger::ptr m_root;
+    MutexType m_mutex;
 };
 
 // 包装类型名称LoggerMgr
