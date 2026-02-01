@@ -249,5 +249,13 @@ int main(int argc, char* argv[]) {
     // test_class();
 
     test_log();
+
+    std::cout << "test Visit:" << std::endl;
+    sylar::Config::Visit([](sylar::ConfigVarBase::ptr var) {
+        SYLAR_LOG_INFO(SYLAR_LOG_NAME("system")) << "name: " << var->getName() 
+                                                << " | description: " << var->getDescription()
+                                                << " | typeName: " << var->getTypeName()
+                                                << " | value: " << var->toString();
+    });
     return 0;
 }

@@ -29,8 +29,8 @@ target_link_libraries(sylar PUBLIC yaml-cpp::yaml-cpp)
 # # add_dependencies(test sylar)
 # target_link_libraries(test sylar)
 
-# add_executable(test_config tests/test_config.cpp)
-# target_link_libraries(test_config sylar)
+add_executable(test_config tests/test_config.cpp)
+target_link_libraries(test_config sylar)
 
 add_executable(test_thread tests/test_thread.cpp)
 target_link_libraries(test_thread sylar)

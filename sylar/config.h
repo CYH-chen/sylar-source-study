@@ -21,6 +21,7 @@
 #include <concepts>
 #include <functional>
 #include "log.h"
+#include "thread.h"
 
 namespace sylar {
 
@@ -292,6 +293,7 @@ public:
     // 定义配置事件的接口，一个“当值发生变化时被调用的回调函数类型”
     // 观察者模式（函数式版本）
     typedef std::function<void (const T& old_value, const T& new_value) > on_change_cb;
+    typedef RWMutex RWMutexType;
 
     ConfigVar(const std::string& name
             ,const T& default_val
@@ -303,6 +305,7 @@ public:
     // T类型转字符串
     std::string toString() override {
         try {
+            RWMutexType::ReadLock lock(m_mutex);
             // return boost::lexical_cast<std::string>(m_val);
             // 替换为统一接口
             // ToStr()(m_val)等价于Lexical_cast<T, std::string>(m_val)，是一个临时对象在调用()函数
@@ -329,22 +332,33 @@ public:
         return false;
     }
     // 返回const引用
-    const T& getValue() const {return m_val;}
+    const T& getValue() const { 
+        RWMutexType::ReadLock lock(m_mutex);
+        return m_val;
+    }
     void setValue(const T& val) {
-        // 这里用了 == ，因此要求传入的 T 重载了 == 运算符
-        if( val == m_val ) {
-            return;
+        // 局部锁
+        { 
+            // 回调函数的时间可能很长，可以用读锁
+            RWMutexType::ReadLock lock(m_mutex);
+            // 这里用了 == ，因此要求传入的 T 重载了 == 运算符
+            if( val == m_val ) {
+                return;
+            }
+            // 逐个通知
+            for(auto& i : m_cbs) {
+                i.second(m_val, val);
+            }
         }
-        // 逐个通知
-        for(auto& i : m_cbs) {
-            i.second(m_val, val);
-        }
+        // 修改时改为写锁
+        RWMutexType::WriteLock lock(m_mutex);
         m_val = val;
     }
     // 返回T的类型名
     std::string getTypeName() const override { return typeid(T).name();}
 
     uint64_t addListener(on_change_cb cb) {
+        RWMutexType::WriteLock lock(m_mutex);
         // s_fun_id转移到类成员变量，方便clear的时候清空
         // static uint64_t s_fun_id = 0;
         ++m_fun_id;
@@ -355,16 +369,19 @@ public:
     }
 
     void delListener(uint64_t key) {
+        RWMutexType::WriteLock lock(m_mutex);
         m_cbs.erase(key);
         SYLAR_LOG_DEBUG(SYLAR_LOG_ROOT()) << getTypeName() << ": An listener has been erased.";
     }
 
     on_change_cb getListener(uint64_t key) {
+        RWMutexType::ReadLock lock(m_mutex);
         auto it = m_cbs.find(key);
         return it == m_cbs.end() ? nullptr : it->second;
     }
 
     void clearListener() {
+        RWMutexType::WriteLock lock(m_mutex);
         m_cbs.clear();
         m_fun_id = 0;
         SYLAR_LOG_DEBUG(SYLAR_LOG_ROOT()) << getTypeName() << ": All listeners have been cleared.";
@@ -382,6 +399,8 @@ private:
      * 
      */
     uint64_t m_fun_id = 0;
+    // mutable突破const的限制
+    mutable RWMutexType m_mutex;
 };
 
 // 管理类，类似LoggerMgr
@@ -394,25 +413,30 @@ public:
      *      
      * */
     typedef std::map<std::string, ConfigVarBase::ptr> ConfigVarMap;
+    typedef RWMutex RWMutexType;
     
     // 创建和查找函数
     template<class T>
     static typename ConfigVar<T>::ptr Lookup(const std::string& name,
             const T& default_val, const std::string& description) {
-        // 调用时必须显式指定模板参数T，才能识别对应函数
-        // auto temp = Lookup<T>(name);
-        // 防止把“类型错误”当成了 name 不存在
-        auto it = GetDatas().find(name);
-        if(it != GetDatas().end()) {
-            auto tmp = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
-            if(tmp) {
-                SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists";
-                return tmp;
-            } else {
-                SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists but type not "
-                        << typeid(T).name() << " real_type=" << it->second->getTypeName()
-                        << " " << it->second->toString();
-                return nullptr;
+        {
+            // 查询时用读锁
+            RWMutexType::ReadLock lock(GetMutex());
+            // 调用时必须显式指定模板参数T，才能识别对应函数
+            // auto temp = Lookup<T>(name);
+            // 防止把“类型错误”当成了 name 不存在, 若dynamic_pointer_cast转换失败则是类型错误
+            auto it = GetDatas().find(name);
+            if(it != GetDatas().end()) {
+                auto tmp = std::dynamic_pointer_cast<ConfigVar<T> >(it->second);
+                if(tmp) {
+                    SYLAR_LOG_INFO(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists";
+                    return tmp;
+                } else {
+                    SYLAR_LOG_ERROR(SYLAR_LOG_ROOT()) << "Lookup name=" << name << " exists but type not "
+                            << typeid(T).name() << " real_type=" << it->second->getTypeName()
+                            << " " << it->second->toString();
+                    return nullptr;
+                }
             }
         }
 
@@ -426,6 +450,8 @@ public:
         // 没有错误，则创建
         // typename ConfigVar<T>::ptr v(new ConfigVar<T>(name, default_val, description));
         typename ConfigVar<T>::ptr v = std::make_shared<ConfigVar<T> >(name, default_val, description);
+        // 修改时用写锁
+        RWMutexType::WriteLock lock(GetMutex());
         GetDatas()[name] = v;
         return v;
     }
@@ -434,6 +460,7 @@ public:
     // 查找函数
     template<class T>
     static typename ConfigVar<T>::ptr Lookup(const std::string& name) {
+        RWMutexType::ReadLock lock(GetMutex());
         auto it = GetDatas().find(name);
         if(it == GetDatas().end()) {
             return nullptr;
@@ -462,7 +489,12 @@ public:
      * @return ConfigVarBase::ptr 配置基类
      */
     static ConfigVarBase::ptr LookupBase(const std::string& name);
-
+    /**
+     * @brief 观察者模式，输出ConfigVarMap，查看其内容
+     * 
+     * @param cb 输出输出ConfigVarMap的方法，从外部导入，与数据结构无关
+     */
+    static void Visit(std::function<void(ConfigVarBase::ptr)> cb);
 private:
     // /**
     //  * @brief 统一存储所有配置项的容器（这里使用inline，不需要在.cpp中再定义）
@@ -482,6 +514,10 @@ private:
     static ConfigVarMap& GetDatas() {
         static ConfigVarMap s_datas;
         return s_datas;
+    }
+    static RWMutexType& GetMutex() {
+        static RWMutexType s_mutex;
+        return s_mutex;
     }
 };
 
