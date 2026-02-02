@@ -629,7 +629,7 @@ LoggerManager::LoggerManager() {
     // 初始化默认logger
     // logger构造函数有默认参数name和level
     // m_root.reset(new Logger);
-    m_root = std::make_shared<Logger>();
+    m_root = std::make_shared<Logger>("root", sylar::LogLevel::DEBUG);
     // m_root->addAppender(LogAppender::ptr(new StdoutLogAppender));
     m_root->addAppender(std::make_shared<StdoutLogAppender>());
     // root日志器注册

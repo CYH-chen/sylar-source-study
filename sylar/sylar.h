@@ -10,6 +10,7 @@
 // 用于存放所有头文件，统一引用
 // 缺点：只要该头文件或其包含的任意头文件发生修改，所有包含它的 .cpp 都需要重新编译
 
+#include "macor.h"
 #include "util.h"
 #include "singleton.h"
 #include "log.h"

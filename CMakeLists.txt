@@ -35,6 +35,9 @@ target_link_libraries(test_config sylar)
 add_executable(test_thread tests/test_thread.cpp)
 target_link_libraries(test_thread sylar)
 
+add_executable(test_util tests/test_util.cpp)
+target_link_libraries(test_util sylar)
+
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
