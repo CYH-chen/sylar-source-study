@@ -3,10 +3,10 @@ logs:
     - name: root
       level: info
       appenders:
-          - type: FileLogAppender
-            fileName: root.txt
-            level: warn
-            # formatter: "%d%T%m%n"
+          # - type: FileLogAppender
+          #   fileName: root.txt
+          #   level: warn
+          #   formatter: "%d%T%m%n"
           - type: StdoutLogAppender
             level: info
             formatter: "%d%T%m%n"

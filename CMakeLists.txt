@@ -12,6 +12,7 @@ set(LIB_SRC
     sylar/util.cpp
     sylar/config.cpp
     sylar/thread.cpp
+    sylar/fiber.cpp
     )
 
 # boost和yaml-cpp用的dnf安装，且为默认位置，无需配置include路径
@@ -29,14 +30,17 @@ target_link_libraries(sylar PUBLIC yaml-cpp::yaml-cpp)
 # # add_dependencies(test sylar)
 # target_link_libraries(test sylar)
 
-add_executable(test_config tests/test_config.cpp)
-target_link_libraries(test_config sylar)
+# add_executable(test_config tests/test_config.cpp)
+# target_link_libraries(test_config sylar)
 
 add_executable(test_thread tests/test_thread.cpp)
 target_link_libraries(test_thread sylar)
 
 add_executable(test_util tests/test_util.cpp)
 target_link_libraries(test_util sylar)
+
+add_executable(test_fiber tests/test_fiber.cpp)
+target_link_libraries(test_fiber sylar)
 
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

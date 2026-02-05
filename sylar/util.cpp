@@ -6,6 +6,7 @@
  */
 #include "util.h"
 #include "log.h"
+#include "fiber.h"
 #include <execinfo.h>
 
 namespace sylar{
@@ -17,8 +18,8 @@ pid_t GetThreadId() {
 }
 
 uint32_t GetFiberId() {
-    // 假设已经有了，后面需要改为协程号
-    return 0;
+    // GetThis()获得当前协程，在调用getId()得到协程id
+    return Fiber::GetFiberId();
 }
 
 void Backtrace(std::vector<std::string>& bt, int size, int skip) {

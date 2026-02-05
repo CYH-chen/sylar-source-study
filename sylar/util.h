@@ -34,7 +34,7 @@ void Backtrace(std::vector<std::string>& bt, int size, int skip = 1);
  * @param skip 跳过前面多少层，默认为2，跳过前面两层Backtrace调用
  * @return std::string 
  */
-std::string BacktraceToString(int size, int skip = 2, const std::string& prefix = "");
+std::string BacktraceToString(int size = 64, int skip = 2, const std::string& prefix = "");
 // const std::string&：若绑定右值（如 “hello”），C++ 会延长临时对象的生命周期至引用作用域结束
 
 }

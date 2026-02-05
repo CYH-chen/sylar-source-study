@@ -34,7 +34,8 @@ public:
         HOLD,
         EXEC,
         TERM,
-        READY
+        READY,
+        EXCEPT
     };
 private:
     /**
@@ -44,10 +45,17 @@ private:
     Fiber();
 
 public:
+    /**
+     * @brief 构造子协程。stacksize = 0 时，会使用配置文件中的stacksize
+     * uc_link = nullptr，任何 Fiber 切换，都必须显式走调度器
+     * @param cb 
+     * @param stacksize 
+     */
     Fiber(std::function<void()> cb, size_t stacksize = 0);
     ~Fiber();
     /**
      * @brief 可用于重置协程，在INIT或TERM状态
+     * 充分利用内存，当协程的内存空间未释放且空闲的时候，直接重置cb，开始一个新任务。
      * 
      * @param cb 执行函数
      */
@@ -58,10 +66,12 @@ public:
      */
     void swapIn();
     /**
-     * @brief 切换到后台
+     * @brief 让出cpu，切换成主协程
      * 
      */
     void swapOut();
+
+    uint64_t getId() { return m_id; }
 
 public:
     /**
@@ -76,6 +86,13 @@ public:
      * @param fiber 传this裸指针进去，不用智能指针
      */
     static void SetThis(Fiber* fiber);
+    /**
+     * @brief 获取当前协程的id，若当前协程为nullptr返回0
+     * 为什么不用GetThis()->getId()：因为有些线程可能协程，调用GetThis()会创建主协程
+     * 
+     * @return uint64_t 
+     */
+    static uint64_t GetFiberId();
     /**
      * @brief 让出cpu，转为READY态
      * 
