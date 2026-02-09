@@ -16,8 +16,8 @@ namespace sylar{
  * 
  */
 
-LogEvent::LogEvent(std::string loggerName, LogLevel::Level level, const char* file, int32_t line, uint32_t elapse,
-            uint32_t threadId, uint32_t fiberId, uint32_t time)
+LogEvent::LogEvent(const std::string loggerName, LogLevel::Level level, const char* file, int32_t line, uint32_t elapse,
+            uint32_t threadId, uint32_t fiberId, uint32_t time, const std::string& threadName)
             :m_loggerName(loggerName)
             ,m_level(level)
             ,m_file(file)
@@ -25,7 +25,8 @@ LogEvent::LogEvent(std::string loggerName, LogLevel::Level level, const char* fi
             ,m_elapse(elapse)
             ,m_threadId(threadId)
             ,m_fiberId(fiberId)
-            ,m_time(time) {
+            ,m_time(time)
+            ,m_threadName(threadName) {
 
 }
 
@@ -230,6 +231,17 @@ public:
     }
 };
 
+
+class ThreadNameFormatItem : public LogFormatter::FormatItem {
+public:
+    // TabFormatItem(const std::string& str = "") {}
+    // 使用基类的构造函数，满足map中的接口要求，实际无作用
+    using LogFormatter::FormatItem::FormatItem;
+    void format(std::ostream& os, LogEvent::ptr event) override {
+        os << event->getThreadName();
+    }
+};
+
 class StringFormatItem : public LogFormatter::FormatItem {
 public:
     StringFormatItem(const std::string& str)
@@ -374,7 +386,7 @@ void LogFormatter::init() {
         XX(l, LineFormatItem),              //l:行号
         XX(T, TabFormatItem),               //T:Tab
         XX(F, FiberIdFormatItem),           //F:协程id
-        // XX(N, ThreadNameFormatItem),        //N:线程名称
+        XX(N, ThreadNameFormatItem),        //N:线程名称
 #undef XX
     }; 
 

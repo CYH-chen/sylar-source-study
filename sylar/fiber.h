@@ -88,7 +88,7 @@ public:
     static void SetThis(Fiber* fiber);
     /**
      * @brief 获取当前协程的id，若当前协程为nullptr返回0
-     * 为什么不用GetThis()->getId()：因为有些线程可能协程，调用GetThis()会创建主协程
+     * 为什么不用GetThis()->getId()：因为有些线程可能无协程，调用GetThis()会创建主协程
      * 
      * @return uint64_t 
      */

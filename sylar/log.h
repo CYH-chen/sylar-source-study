@@ -36,7 +36,7 @@
     if(logger->getLevel() <= level) \
         sylar::LogEventWrap(logger, sylar::LogEvent::ptr(new sylar::LogEvent( \
             logger->getName(), level, std::source_location::current().file_name(), std::source_location::current().line(), \
-            0, sylar::GetThreadId(), sylar::GetFiberId(), time(0)))).getSS()
+            0, sylar::GetThreadId(), sylar::GetFiberId(), time(0), sylar::Thread::GetName()))).getSS()
 
 #define SYLAR_LOG_DEBUG(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::DEBUG)
 #define SYLAR_LOG_INFO(logger) SYLAR_LOG_LEVEL(logger, sylar::LogLevel::INFO)
@@ -50,7 +50,7 @@
     if(logger->getLevel() <= level) \
         sylar::LogEventWrap(logger, sylar::LogEvent::ptr(new sylar::LogEvent(logger->getName(), level, \
                         std::source_location::current().file_name(), std::source_location::current().line(), \
-                        0, sylar::GetThreadId(), sylar::GetFiberId(), time(0)))).getEvent()->format(fmt, __VA_ARGS__)
+                        0, sylar::GetThreadId(), sylar::GetFiberId(), time(0), sylar::Thread::GetName()))).getEvent()->format(fmt, __VA_ARGS__)
 
 #define SYLAR_LOG_FMT_DEBUG(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::DEBUG, fmt, __VA_ARGS__)
 #define SYLAR_LOG_FMT_INFO(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar::LogLevel::INFO, fmt, __VA_ARGS__)
@@ -93,21 +93,22 @@ public:
 class LogEvent{
 public:
     typedef std::shared_ptr<LogEvent> ptr;
-    LogEvent(std::string loggerName, LogLevel::Level level, const char* file, int32_t line, uint32_t elapse,
-            uint32_t threadId, uint32_t fiberId, uint32_t time);
+    LogEvent(const std::string loggerName, LogLevel::Level level, const char* file, int32_t line, uint32_t elapse,
+            uint32_t threadId, uint32_t fiberId, uint32_t time, const std::string& threadName);
     // ~LogEvent();
 
+    const std::string& getLoggerName() const { return m_loggerName;}
+    LogLevel::Level getLevel() const { return m_level;}
     const char* getFile() const { return m_file;}
     int32_t getLine() const { return m_line;}
     uint32_t getElapse() const { return m_elapse;}
     uint32_t getThreadId() const { return m_threadId;}
     uint32_t getFiberId() const { return m_fiberId;}
     uint64_t getTime() const { return m_time;}
+    const std::string& getThreadName() const { return m_threadName;}
     // 输出日志
     std::string getContent() const { return m_ss.str();}
     std::stringstream& getSS() { return m_ss;}
-    const std::string& getLoggerName() const { return m_loggerName;}
-    LogLevel::Level getLevel() const { return m_level;}
 
     // 可用fmt库或者C++20的format库进行替换
     // 格式化写入日志内容
@@ -130,7 +131,9 @@ private:
     // 协程id      
     uint32_t m_fiberId = 0;  
     // 时间戳       
-    uint64_t m_time = 0;  
+    uint64_t m_time = 0;
+    // 线程名，需要保存当前event的线程名。打印日志的线程可能与日志发生的线程不一致
+    std::string m_threadName;  
     // 内容          
     std::stringstream m_ss;
 };
@@ -141,7 +144,7 @@ public:
     typedef std::shared_ptr<LogFormatter> ptr;
     // 根据pattern模式字符串进行格式化
     // 有默认值
-    LogFormatter(const std::string& pattern = "%d{%Y-%m-%d %H:%M:%S}%T%t%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");   
+    LogFormatter(const std::string& pattern = "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n");   
 
     std::string format(LogEvent::ptr event);
 public:

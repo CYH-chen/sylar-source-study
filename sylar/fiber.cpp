@@ -69,6 +69,12 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize)
     // nullptr确保是显示调度，任何 Fiber 切换，都必须显式走调度器
     m_ctx.uc_link = nullptr;
     // 绑定分配的栈空间
+    /**
+     * 栈空间会保存其执行函数中的局部变量
+     * 因此若其中有用到智能指针，需要手动释放
+     * 不然计数永远+1，无法自动析构，同时反过来导致调用栈无法被释放，造成内存泄露（类似死锁）
+     * 
+     */
     m_ctx.uc_stack.ss_sp = m_stack;
     m_ctx.uc_stack.ss_size = m_stacksize;
     // 指定入口函数，真正切换用swapcontext
@@ -208,7 +214,12 @@ void Fiber::MainFunc() {
             << std::endl
             << sylar::BacktraceToString();
     }
-    
+    // 释放智能指针
+    auto raw_ptr = cur.get();
+    // 引用计数-1
+    cur.reset();
+    // 切回主协程
+    raw_ptr->swapOut();
 }
 
 }
