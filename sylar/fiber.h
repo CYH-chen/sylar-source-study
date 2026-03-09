@@ -48,8 +48,9 @@ public:
      * uc_link = nullptr，任何 Fiber 切换，都必须显式走调度器
      * @param cb 
      * @param stacksize 
+     * @param run_in_scheduler 协程是否在Scheduler中运行，是的话与调度协程进行切换操作
      */
-    Fiber(std::function<void()> cb, size_t stacksize = 0);
+    Fiber(std::function<void()> cb, size_t stacksize = 0, bool use_caller = false);
     ~Fiber();
     /**
      * @brief 可用于重置协程，在READY或TERM状态
@@ -68,6 +69,15 @@ public:
      * 
      */
     void swapOut();
+    /**
+     * @brief 
+     * 
+     */
+    void call();
+    /**
+     * @brief 从调度协程返回真正的主协程
+     */
+    void back();
 
     uint64_t getId() const { return m_id; }
 
@@ -98,7 +108,7 @@ public:
      * @brief 让出cpu，转为READY态
      * 
      */
-    static void Yield();
+    static void YieldToReady();
 
     // 获取用于服务器统计分析的信息
     /**
@@ -112,6 +122,11 @@ public:
      * 
      */
     static void MainFunc();
+    /**
+     * @brief 调度协程要执行的函数，用于caller线程
+     * 
+     */
+    static void CallerMainFunc();
 
 private:
     uint64_t m_id= 0;

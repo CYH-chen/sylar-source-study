@@ -15,6 +15,7 @@
 #include "log.h"
 #include "macor.h"
 #include "singleton.h"
+#include "scheduler.h"
 #include "thread.h"
 #include "util.h"
 

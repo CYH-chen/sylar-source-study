@@ -42,7 +42,7 @@ Scheduler::Scheduler(size_t threads, bool use_caller, const std::string& name)
          * 调度结束后 无法返回调用 start() 的地方。
          * 因此使用一个调度协程rootFiber来执行run()，mainFiber仍进行协程切换任务。
          */
-        m_rootFiber = std::make_shared<Fiber>(std::bind(&Scheduler::run, this));
+        m_rootFiber = std::make_shared<Fiber>(std::bind(&Scheduler::run, this), 0, true);
         Thread::SetName(m_name);
         /**
          * @brief 此处的调度协程就不是mainFiber了，而是额外的一个专门用于任务调度的协程。
@@ -93,16 +93,34 @@ void Scheduler::start() {
         // 由于Thread的创建用了信号量，因此创建完毕后一定完成了参数初始化
         m_threadIds.push_back(m_threads[i]->getId());
     }
+    // 主动解锁，防止死锁
+    lock.unlock();
+    if(m_rootFiber) {
+        // caller线程切入调度协程，执行run()
+        // 这里如果swapIn内是与调度协程切换，而m_rootFiber本身就是调度协程，相当于与自身切换，状态仍是EXEC就出来了。
+        // 调度协程禁止使用swapIn()
+        m_rootFiber->call();
+        /**
+         * @attention 这里使用独立的调度协程进行切入，需要修改fiber.h中的主协程获取方法。
+         * 因为此时m_rootFiber就充当着主协程的作用，因此caller线程swapOut时必须与m_rootFiber进行切换。
+         * 
+         * 跑飞的原因：rootFiber先swapIn;而idleFiber再次swapIn，覆盖了rootFiber的旧上下文。
+         * 导致rootFiber返回时，回到的是rootFiber的上下文，再也回不到main()了。
+         * 此处使用swapIn()，而在进入的run()中又会有idle的swapIn()。一定会跑飞！！
+         * 
+         */
+        SYLAR_LOG_DEBUG(g_logger) << "m_rootFiber回归";
+    }
 }
 
 // 核心思想：等待所有任务执行完毕后stop
 void Scheduler::stop() {
     m_autoStop = true;
-    // 当线程池中仅有一个use_caller线程，并且其为Term或READY状态
+    // 当线程池中仅有一个use_caller线程，并且其为Term或INIT状态
     if(m_rootFiber
             && m_threadCount == 0
             && (m_rootFiber->getState() == Fiber::TERM
-                || m_rootFiber->getState() == Fiber::READY)) {
+                || m_rootFiber->getState() == Fiber::INIT)) {
         SYLAR_LOG_INFO(g_logger) << this << " stopped";
         m_stopping = true;
         // 子类清理任务
@@ -267,8 +285,10 @@ bool Scheduler::stopping() {
 
 void Scheduler::idle() {
     SYLAR_LOG_INFO(g_logger) << "idle";
+    // 此处会无限循环，如果没有外部调用stop()的话
     while(!stopping()) {
-        sylar::Fiber::Yield();
+        sylar::Fiber::YieldToReady();
+        // SYLAR_LOG_INFO(g_logger) << "YieldToReady";
     }
 }
 

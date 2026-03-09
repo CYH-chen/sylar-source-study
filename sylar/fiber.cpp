@@ -10,6 +10,7 @@
 #include "log.h"
 #include "config.h"
 #include "macor.h"
+#include "scheduler.h"
 
 namespace sylar {
 
@@ -52,10 +53,10 @@ Fiber::Fiber() {
         SYLAR_ASSERT2(false, "getcontext");
     }
 
-    SYLAR_LOG_DEBUG(g_logger) << "Fiber::Fiber";
+    SYLAR_LOG_DEBUG(g_logger) << "Fiber::Fiber mainFiber";
 }
 
-Fiber::Fiber(std::function<void()> cb, size_t stacksize) 
+Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool use_caller) 
     :m_id(++s_fiber_id)
     ,m_cb(cb) {
     ++s_fiber_count;
@@ -77,8 +78,12 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize)
      */
     m_ctx.uc_stack.ss_sp = m_stack;
     m_ctx.uc_stack.ss_size = m_stacksize;
-    // 指定入口函数，真正切换用swapcontext
-    makecontext(&m_ctx, &Fiber::MainFunc, 0);
+    if(use_caller) {
+        makecontext(&m_ctx, &Fiber::CallerMainFunc, 0);
+    } else {
+        // 指定入口函数，真正切换用swapcontext
+        makecontext(&m_ctx, &Fiber::MainFunc, 0);
+    }
 
     SYLAR_LOG_DEBUG(g_logger) << "Fiber::Fiber id = " << m_id;
 }
@@ -88,7 +93,7 @@ Fiber::~Fiber() {
     // 主协程没有栈空间 m_stack == nullptr
     if(m_stack) {
         // 有栈的情况下，协程状态要么状态是刚初始化，要么是结束了
-        SYLAR_ASSERT(m_state == READY || m_state == EXCEPT || m_state == TERM);
+        SYLAR_ASSERT(m_state == INIT || m_state == EXCEPT || m_state == TERM);
         StackAllocator::Dealloc(m_stack, m_stacksize);
     }
     else {
@@ -107,8 +112,8 @@ Fiber::~Fiber() {
 void Fiber::reset(std::function<void()> cb) {
     // 有栈且状态对的协程才能重置
     SYLAR_ASSERT(m_stack);
-    // 协程只有在EXCEPT和TERM状态下才允许重置
-    SYLAR_ASSERT(m_state == EXCEPT || m_state == TERM);
+    // 协程只有在EXCEPT和TERM、INIT状态下才允许重置
+    SYLAR_ASSERT(m_state == EXCEPT || m_state == TERM || m_state == INIT);
     // 转移cb
     m_cb = std::move(cb);
 
@@ -119,7 +124,7 @@ void Fiber::reset(std::function<void()> cb) {
     m_ctx.uc_link = nullptr;
     makecontext(&m_ctx, &Fiber::MainFunc, 0);
 
-    m_state = READY;
+    m_state = INIT;
 }
 
 void Fiber::swapIn() {
@@ -127,16 +132,37 @@ void Fiber::swapIn() {
     // 必定不在运行态
     SYLAR_ASSERT(m_state != EXEC);
     m_state = EXEC;
-    // 将当前状态保存到old_context中，切换到new_context
-    if(swapcontext(&(t_threadFiber->m_ctx), &m_ctx)) {
+    
+    SYLAR_LOG_INFO(g_logger) << "从调度协程切入协程";
+    // swapcontext(&old_context, &new_context)将当前状态保存到old_context中，切换到new_context
+    if(swapcontext(&(Scheduler::GetMainFiber()->m_ctx), &m_ctx)) {
+        SYLAR_ASSERT2(false, "swapcontext error");
+    }
+    
+}
+
+void Fiber::swapOut() {
+    SYLAR_LOG_INFO(g_logger) << "切回调度协程";
+    // 切回调度协程
+    SetThis(Scheduler::GetMainFiber());
+    if(swapcontext(&m_ctx, &(Scheduler::GetMainFiber()->m_ctx))) {
         SYLAR_ASSERT2(false, "swapcontext error");
     }
 }
 
-void Fiber::swapOut() {
-    // 切回主协程
+void Fiber::call() {
+    SetThis(this);
+    SYLAR_ASSERT(m_state != EXEC);
+    m_state = EXEC;
+    if(swapcontext(&t_threadFiber->m_ctx, &m_ctx)) {
+        SYLAR_ASSERT2(false, "swapcontext error");
+    }
+}
+
+
+void Fiber::back() {
     SetThis(t_threadFiber.get());
-    if(swapcontext(&m_ctx, &(t_threadFiber->m_ctx))) {
+    if(swapcontext(&m_ctx, &t_threadFiber->m_ctx)) {
         SYLAR_ASSERT2(false, "swapcontext error");
     }
 }
@@ -179,7 +205,7 @@ uint64_t Fiber::GetFiberId() {
     return 0;
 }
 
-void Fiber::Yield() {
+void Fiber::YieldToReady() {
     Fiber::ptr cur = GetThis();
     SYLAR_ASSERT(cur->m_state == EXEC);
     cur->m_state = READY;
@@ -218,6 +244,45 @@ void Fiber::MainFunc() {
     cur.reset();
     // 切回主协程
     raw_ptr->swapOut();
+
+    /**
+     * @brief 为什么会出现"never reach"？在没有CallerMainFunc()之前，rootFiber使用的是swapOut()。
+     * 犯了与swapIn()同样的错误，调度协程不能使用swapOut()，swapOut()与调度协程进行切换，相当于与自己切换，根本没离开。
+     * 调度协程必须用back()与主协程切换才行。
+     */
+    SYLAR_ASSERT2(false, "never reach");
+}
+
+void Fiber::CallerMainFunc() {
+    Fiber::ptr cur = GetThis();
+    try
+    {
+        cur->m_cb();
+        cur->m_cb = nullptr;
+        cur->m_state = TERM;
+    }
+    catch(const std::exception& e) {
+        cur->m_state = EXCEPT;
+        SYLAR_LOG_ERROR(g_logger) << "Fiber Except: " << e.what()
+            << " fiber_id=" << cur->getId()
+            << std::endl
+            << sylar::BacktraceToString();
+    }
+    catch (...) {
+        cur->m_state = EXCEPT;
+        SYLAR_LOG_ERROR(g_logger) << "Fiber Except"
+            << " fiber_id=" << cur->getId()
+            << std::endl
+            << sylar::BacktraceToString();
+    }
+    // 释放智能指针
+    auto raw_ptr = cur.get();
+    // 引用计数-1，主动释放Fiber::ptr。因为该Fiber::ptr局部变量存储在该协程的栈空间中，必须手动释放
+    cur.reset();
+    // 切回主协程
+    raw_ptr->back();
+
+    SYLAR_ASSERT2(false, "never reach");
 }
 
 }

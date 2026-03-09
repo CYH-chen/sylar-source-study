@@ -35,14 +35,17 @@ target_link_libraries(sylar PUBLIC yaml-cpp::yaml-cpp)
 # add_executable(test_config tests/test_config.cpp)
 # target_link_libraries(test_config sylar)
 
-add_executable(test_thread tests/test_thread.cpp)
-target_link_libraries(test_thread sylar)
+# add_executable(test_thread tests/test_thread.cpp)
+# target_link_libraries(test_thread sylar)
 
-add_executable(test_util tests/test_util.cpp)
-target_link_libraries(test_util sylar)
+# add_executable(test_util tests/test_util.cpp)
+# target_link_libraries(test_util sylar)
 
 add_executable(test_fiber tests/test_fiber.cpp)
 target_link_libraries(test_fiber sylar)
+
+add_executable(test_scheduler tests/test_scheduler.cpp)
+target_link_libraries(test_scheduler sylar)
 
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

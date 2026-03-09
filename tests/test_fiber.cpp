@@ -5,7 +5,7 @@ sylar::Logger::ptr g_logger = SYLAR_LOG_ROOT();
 void run() {
     SYLAR_LOG_INFO(g_logger) << "child fiber run.";
     // 挂起
-    sylar::Fiber::GetThis()->Yield();
+    sylar::Fiber::GetThis()->YieldToReady();
     SYLAR_LOG_INFO(g_logger) << "child fiber end.";
 }
 

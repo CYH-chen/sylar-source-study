@@ -55,6 +55,10 @@ public:
      * 
      */
     void start();
+    /**
+     * @brief 停止所有活动
+     * 
+     */
     void stop();
 
     // 调度器执行任务的方法
@@ -92,8 +96,22 @@ public:
     }
 
 protected:
+    /**
+     * @brief 唤醒函数
+     * 
+     */
     virtual void tickle();
+    /**
+     * @brief 线程入口函数：进行任务调度
+     * 
+     */
     void run();
+    /**
+     * @brief 指示是否停止
+     * 
+     * @return true 
+     * @return false 
+     */
     virtual bool stopping();
     /**
      * @brief idler协程，空闲时执行。
