@@ -11,8 +11,10 @@ set(LIB_SRC
     sylar/log.cpp
     sylar/util.cpp
     sylar/config.cpp
+    sylar/mutex.cpp
     sylar/thread.cpp
     sylar/fiber.cpp
+    sylar/scheduler.cpp
     )
 
 # boost和yaml-cpp用的dnf安装，且为默认位置，无需配置include路径

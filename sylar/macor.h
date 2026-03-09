@@ -5,10 +5,12 @@
  * @date 2026-02-02
  * 
  */
-#ifndef __MACOR_H__
-#define __MACOR_H__
+#ifndef __SYLAR_MACOR_H__
+#define __SYLAR_MACOR_H__
 
 #include "util.h"
+
+#include <assert.h>
 
 // __builtin_expect(long expr, long expected)即“expr 的值，大概率等于 expected”
 // 如果是 GCC / Clang，用它们支持的内建优化指令 __builtin_expect

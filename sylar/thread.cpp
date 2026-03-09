@@ -64,8 +64,12 @@ Thread::Thread(std::function<void()> cb, const std::string& name)
             << " name=" << name;
         throw std::logic_error("pthread_create error");
     }
-    // 阻塞当前构造函数，确保创建的线程开始运行后，在退出构造函数。在run函数中会调用m_semaphore.notify()
-    // 保证构造线程类完成之前，线程一定开始运行了
+    /**
+     * @brief 阻塞构造函数，直到新线程完成初始化，避免竞态条件。在run函数中会调用m_semaphore.notify()
+     * 保证构造线程类完成之前，线程一定开始运行了。
+     * 即对线程参数进行了初始化，防止外部代码在构造函数后马上获取参数而参数却未初始化。
+     * @example 参考scheduler.h第87行
+     */
     m_semaphore.wait();
 }
 

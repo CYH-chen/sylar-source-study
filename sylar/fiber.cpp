@@ -19,7 +19,7 @@ static std::atomic<uint64_t> s_fiber_count { 0 };
 static Logger::ptr g_logger = SYLAR_LOG_NAME("system");
 
 // 线程的当前协程
-static thread_local Fiber* t_fiber = nullptr;
+static thread_local Fiber* t_scheduler_fiber = nullptr;
 // 线程的主协程
 static thread_local Fiber::ptr t_threadFiber = nullptr;
 
@@ -88,14 +88,14 @@ Fiber::~Fiber() {
     // 主协程没有栈空间 m_stack == nullptr
     if(m_stack) {
         // 有栈的情况下，协程状态要么状态是刚初始化，要么是结束了
-        SYLAR_ASSERT(m_state == INIT || m_state == EXCEPT || m_state == TERM);
+        SYLAR_ASSERT(m_state == READY || m_state == EXCEPT || m_state == TERM);
         StackAllocator::Dealloc(m_stack, m_stacksize);
     }
     else {
         // 此时为主协程，没有callback函数且状态为EXEC
         SYLAR_ASSERT(!m_cb && m_state == EXEC);
         // 比较是否为当前协程，是的话将当前协程置为nullptr
-        Fiber* cur =  t_fiber;
+        Fiber* cur =  t_scheduler_fiber;
         if(cur == this) {
             SetThis(nullptr);
         }
@@ -107,7 +107,8 @@ Fiber::~Fiber() {
 void Fiber::reset(std::function<void()> cb) {
     // 有栈且状态对的协程才能重置
     SYLAR_ASSERT(m_stack);
-    SYLAR_ASSERT(m_state == INIT || m_state == EXCEPT || m_state == TERM);
+    // 协程只有在EXCEPT和TERM状态下才允许重置
+    SYLAR_ASSERT(m_state == EXCEPT || m_state == TERM);
     // 转移cb
     m_cb = std::move(cb);
 
@@ -118,7 +119,7 @@ void Fiber::reset(std::function<void()> cb) {
     m_ctx.uc_link = nullptr;
     makecontext(&m_ctx, &Fiber::MainFunc, 0);
 
-    m_state = INIT;
+    m_state = READY;
 }
 
 void Fiber::swapIn() {
@@ -140,8 +141,14 @@ void Fiber::swapOut() {
     }
 }
 
+/**
+ * @brief 返回当前线程正在执行的协程。
+ * 如果当前线程还未创建协程，则创建线程的第一个协程，且该协程为当前线程的主协程，其他协程都通过这个协程来调度；
+ * 也就是说，其他协程结束时,都要切回到主协程，由主协程重新选择新的协程进行resume。
+ * @attention 线程如果要创建协程，那么应该首先执行一下Fiber::GetThis()操作，以初始化主函数协程
+ */
 Fiber::ptr Fiber::GetThis() {
-    if(t_fiber) {
+    if(t_scheduler_fiber) {
         /**
          * 如果当前协程存在，则返回对应的智能指针。
          *  
@@ -150,41 +157,32 @@ Fiber::ptr Fiber::GetThis() {
          * 在类内部调用shared_from_this返回的是weak_this.lock()，即对应的智能指针。
          * 
          */
-        return t_fiber->shared_from_this();
+        return t_scheduler_fiber->shared_from_this();
     }
     // 不存在，代表主协程未创建，进行创建
-    // std::make_shared<Fiber>()是错误的，make_shraed在std空间中，无法访问私有函数
+    // std::make_shared<Fiber>()是错误的，make_shraed在std空间中，无法访问私有函数。Fiber()中有SetThis()
     Fiber::ptr main_fiber(new Fiber());
     // 确认是否创建，默认构造中调用了SetThis()
-    SYLAR_ASSERT(t_fiber == main_fiber.get());
+    SYLAR_ASSERT(t_scheduler_fiber == main_fiber.get());
     t_threadFiber = main_fiber;
-    return t_fiber->shared_from_this();
+    return t_scheduler_fiber->shared_from_this();
 }
 
 void Fiber::SetThis(Fiber* fiber) {
-    t_fiber = fiber;
+    t_scheduler_fiber = fiber;
 }
 
 uint64_t Fiber::GetFiberId() {
-    if(t_fiber) {
-        return t_fiber->getId();
+    if(t_scheduler_fiber) {
+        return t_scheduler_fiber->getId();
     }
     return 0;
 }
 
-void Fiber:: YieldToReady() {
+void Fiber::Yield() {
     Fiber::ptr cur = GetThis();
-    // 禁止在主协程调用该方法
-    SYLAR_ASSERT(cur != t_threadFiber);
+    SYLAR_ASSERT(cur->m_state == EXEC);
     cur->m_state = READY;
-    cur->swapOut();
-}
-
-void Fiber::YieldToHold() {
-    Fiber::ptr cur = GetThis();
-    // 禁止在主协程调用该方法
-    SYLAR_ASSERT(cur != t_threadFiber);
-    cur->m_state = HOLD;
     cur->swapOut();
 }
 
@@ -216,7 +214,7 @@ void Fiber::MainFunc() {
     }
     // 释放智能指针
     auto raw_ptr = cur.get();
-    // 引用计数-1
+    // 引用计数-1，主动释放Fiber::ptr。因为该Fiber::ptr局部变量存储在该协程的栈空间中，必须手动释放
     cur.reset();
     // 切回主协程
     raw_ptr->swapOut();

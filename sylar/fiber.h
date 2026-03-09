@@ -28,13 +28,11 @@ namespace sylar {
 class Fiber : public std::enable_shared_from_this<Fiber> {
 public:
     typedef std::shared_ptr<Fiber> ptr;
-
     enum State {
         INIT,
-        HOLD,
+        READY,
         EXEC,
         TERM,
-        READY,
         EXCEPT
     };
 private:
@@ -54,7 +52,7 @@ public:
     Fiber(std::function<void()> cb, size_t stacksize = 0);
     ~Fiber();
     /**
-     * @brief 可用于重置协程，在INIT或TERM状态
+     * @brief 可用于重置协程，在READY或TERM状态
      * 充分利用内存，当协程的内存空间未释放且空闲的时候，直接重置cb，开始一个新任务。
      * 
      * @param cb 执行函数
@@ -71,13 +69,16 @@ public:
      */
     void swapOut();
 
-    uint64_t getId() { return m_id; }
+    uint64_t getId() const { return m_id; }
+
+    State getState() const { return m_state; }
 
 public:
     /**
-     * @brief Get the This object
-     * 
-     * @return Fiber::ptr 智能指针
+     * @brief 返回当前线程正在执行的协程。
+     * 如果当前线程还未创建协程，则创建线程的第一个协程，且该协程为当前线程的主协程，其他协程都通过这个协程来调度；
+     * 也就是说，其他协程结束时,都要切回到主协程，由主协程重新选择新的协程进行resume。
+     * @attention 线程如果要创建协程，那么应该首先执行一下Fiber::GetThis()操作，以初始化主函数协程
      */
     static Fiber::ptr GetThis();
     /**
@@ -97,12 +98,7 @@ public:
      * @brief 让出cpu，转为READY态
      * 
      */
-    static void YieldToReady();
-    /**
-     * @brief 让出cpu，转为HOLD态
-     * 
-     */
-    static void YieldToHold();
+    static void Yield();
 
     // 获取用于服务器统计分析的信息
     /**

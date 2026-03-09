@@ -94,9 +94,10 @@ concept SequenceContainer =
 template<class T>
 concept SetContainer =
     requires(T c, typename T::value_type v) {
+        typename T::key_type;
         { c.insert(v) };
     }
-    && (!requires { typename T::mapped_type; });
+    && std::same_as<typename T::key_type, typename T::value_type>;
 // map / unordered_map 以及类map容器
 template<class T>
 concept StringKeyMapContainer =
