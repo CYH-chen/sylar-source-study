@@ -48,9 +48,9 @@ public:
      * uc_link = nullptr，任何 Fiber 切换，都必须显式走调度器
      * @param cb 
      * @param stacksize 
-     * @param run_in_scheduler 协程是否在Scheduler中运行，是的话与调度协程进行切换操作
+     * @param isBackToCaller 该协程是否返回到Caller的主协程
      */
-    Fiber(std::function<void()> cb, size_t stacksize = 0, bool use_caller = false);
+    Fiber(std::function<void()> cb, size_t stacksize = 0, bool isBackToCaller = false);
     ~Fiber();
     /**
      * @brief 可用于重置协程，在READY或TERM状态

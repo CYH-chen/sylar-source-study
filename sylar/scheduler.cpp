@@ -93,13 +93,13 @@ void Scheduler::start() {
         // 由于Thread的创建用了信号量，因此创建完毕后一定完成了参数初始化
         m_threadIds.push_back(m_threads[i]->getId());
     }
-    // 主动解锁，防止死锁
-    lock.unlock();
-    if(m_rootFiber) {
-        // caller线程切入调度协程，执行run()
-        // 这里如果swapIn内是与调度协程切换，而m_rootFiber本身就是调度协程，相当于与自身切换，状态仍是EXEC就出来了。
-        // 调度协程禁止使用swapIn()
-        m_rootFiber->call();
+    // // 主动解锁，防止死锁
+    // lock.unlock();
+    // if(m_rootFiber) {
+    //     // caller线程切入调度协程，执行run()。这里主动call，会马上进run()的死循环，导致后续程序断流。
+    //     // 这里如果swapIn内是与调度协程切换，而m_rootFiber本身就是调度协程，相当于与自身切换，状态仍是EXEC就出来了。
+    //     // 调度协程禁止使用swapIn()
+    //     m_rootFiber->call();
         /**
          * @attention 这里使用独立的调度协程进行切入，需要修改fiber.h中的主协程获取方法。
          * 因为此时m_rootFiber就充当着主协程的作用，因此caller线程swapOut时必须与m_rootFiber进行切换。
@@ -109,8 +109,8 @@ void Scheduler::start() {
          * 此处使用swapIn()，而在进入的run()中又会有idle的swapIn()。一定会跑飞！！
          * 
          */
-        SYLAR_LOG_DEBUG(g_logger) << "m_rootFiber回归";
-    }
+    //     SYLAR_LOG_DEBUG(g_logger) << "m_rootFiber回归";
+    // }
 }
 
 // 核心思想：等待所有任务执行完毕后stop
@@ -139,19 +139,35 @@ void Scheduler::stop() {
         SYLAR_ASSERT(GetThis() != this);
     }
 
+    // 这里其实是实现了一个优雅退出，将任务队列里的任务清空了再停止
+
     m_stopping = true;
     // 有多少个线程就唤醒多少次，唤醒完也就结束了
     for(size_t i = 0; i < m_threadCount; ++i) {
         tickle();
     }
-    // 调度协程存在，要额外唤醒一次
+    
     if(m_rootFiber) {
-        tickle();
+        // 不需要再唤醒了，只有此刻rootFiber才call()
+        // tickle();
+
+        // 两个stop的bool值都是true了，只要任务列表和活跃线程都为0，就能退出。
+        if(!stopping()) {
+            // 如果没结束尚有任务，则启动caller线程进行任务执行
+            m_rootFiber->call();
+        }
     }
 
-    // 子类清理任务
-    if(stopping()) {
-        return;
+    std::vector<Thread::ptr> thrs;
+    {
+        MutexType::Lock lock(m_mutex);
+        // 将threads置空
+        thrs.swap(m_threads);
+    }
+
+    for(auto& i : thrs) {
+        //逐个join切下来的线程，等待他们退出完毕
+        i->join();
     }
 }
 
@@ -203,11 +219,13 @@ void Scheduler::run() {
                 }
                 // 取出任务并将其移出任务队列
                 task = *it;
+                // 在erase的同时就要++m_activeThreadCount，不能出现线程切换
+                // 防止中间m_tasks为空且m_activeThreadCount==0的空挡，导致线程的stopping()变为true引发idle协程退出
                 ++m_activeThreadCount;
                 m_tasks.erase(it++);
                 break;
             }
-            // 当前线程拿完一个任务后，发现任务队列还有剩余，那么tickle一下其他线程
+            // 必须是break出来的当前线程拿完一个任务后，发现任务队列还有剩余，那么tickle一下其他线程
             tickle_me |= (it != m_tasks.end());
         }
 
@@ -268,6 +286,7 @@ void Scheduler::run() {
             ++m_idleThreadCount;
             idleFiber->swapIn();
             --m_idleThreadCount;
+            // SYLAR_LOG_INFO(g_logger) << "从idleFiber中返回了.";
         }
         
     }

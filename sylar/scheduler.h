@@ -193,9 +193,9 @@ protected:
     // 多线程同时修改
     std::atomic<size_t> m_activeThreadCount{0};
     std::atomic<size_t> m_idleThreadCount{0};
-    bool m_stopping = true;
+    std::atomic<bool> m_stopping = true;
     // 是否自动停止
-    bool m_autoStop = false;
+    std::atomic<bool> m_autoStop = false;
     // 主线程ID，use_caller的ID 
     int m_rootThreadId = 0;
 };

@@ -44,6 +44,7 @@ public:
 using StackAllocator = MallocStackAllocator;
 
 Fiber::Fiber() {
+    // 每个线程都有一个mainFiber，且id == 0
     ++s_fiber_count;
     m_state = EXEC;
     SetThis(this);
@@ -56,7 +57,7 @@ Fiber::Fiber() {
     SYLAR_LOG_DEBUG(g_logger) << "Fiber::Fiber mainFiber";
 }
 
-Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool use_caller) 
+Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool isBackToCaller) 
     :m_id(++s_fiber_id)
     ,m_cb(cb) {
     ++s_fiber_count;
@@ -78,7 +79,7 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool use_caller)
      */
     m_ctx.uc_stack.ss_sp = m_stack;
     m_ctx.uc_stack.ss_size = m_stacksize;
-    if(use_caller) {
+    if(isBackToCaller) {
         makecontext(&m_ctx, &Fiber::CallerMainFunc, 0);
     } else {
         // 指定入口函数，真正切换用swapcontext
@@ -133,7 +134,7 @@ void Fiber::swapIn() {
     SYLAR_ASSERT(m_state != EXEC);
     m_state = EXEC;
     
-    SYLAR_LOG_INFO(g_logger) << "从调度协程切入协程";
+    // SYLAR_LOG_INFO(g_logger) << "从调度协程切入协程";
     // swapcontext(&old_context, &new_context)将当前状态保存到old_context中，切换到new_context
     if(swapcontext(&(Scheduler::GetMainFiber()->m_ctx), &m_ctx)) {
         SYLAR_ASSERT2(false, "swapcontext error");
@@ -142,7 +143,7 @@ void Fiber::swapIn() {
 }
 
 void Fiber::swapOut() {
-    SYLAR_LOG_INFO(g_logger) << "切回调度协程";
+    // SYLAR_LOG_INFO(g_logger) << "切回调度协程";
     // 切回调度协程
     SetThis(Scheduler::GetMainFiber());
     if(swapcontext(&m_ctx, &(Scheduler::GetMainFiber()->m_ctx))) {
@@ -242,7 +243,7 @@ void Fiber::MainFunc() {
     auto raw_ptr = cur.get();
     // 引用计数-1，主动释放Fiber::ptr。因为该Fiber::ptr局部变量存储在该协程的栈空间中，必须手动释放
     cur.reset();
-    // 切回主协程
+    // 切回调度协程
     raw_ptr->swapOut();
 
     /**
